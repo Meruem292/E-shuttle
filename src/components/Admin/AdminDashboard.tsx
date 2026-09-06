@@ -498,9 +498,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [rideStatusFilter, setRideStatusFilter] = useState<string>('ALL');
   const [rideSearch, setRideSearch] = useState('');
 
-  // Account CRUD Management State (Passenger, Driver, Admin)
+  // Account CRUD Management State (Passenger, Driver)
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
-  const [createRole, setCreateRole] = useState<'customer' | 'driver' | 'admin'>('customer');
+  const [createRole, setCreateRole] = useState<'customer' | 'driver'>('customer');
   const [createFullName, setCreateFullName] = useState('');
   const [createEmail, setCreateEmail] = useState('');
   const [createPhone, setCreatePhone] = useState('');
@@ -641,46 +641,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               phone: createPhone.trim(),
               zone: selectedZone?.name || 'All Zones',
               rfidCardUid: createRfidUid.trim().toUpperCase() || null,
-            },
-          },
-          performedBy: {
-            uid: currentUser?.uid || 'admin',
-            name: userProfile?.fullName || 'Platform Administrator',
-            email: currentUser?.email || undefined,
-            role: 'admin',
-          },
-          severity: 'success',
-        }).catch(() => {});
-      } else if (createRole === 'admin') {
-        const cleanUsername = (createUsername.trim() || createEmail.split('@')[0]).toLowerCase();
-        const adminDoc: UserProfile = {
-          uid: newUid,
-          fullName: createFullName.trim(),
-          email: createEmail.trim().toLowerCase(),
-          username: cleanUsername,
-          phone: createPhone.trim() || '+63 917 000 0000',
-          role: 'admin',
-          accountStatus: 'APPROVED',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
-
-        await setDoc(doc(db, 'users', newUid), adminDoc);
-
-        logActivity({
-          action: 'CREATE',
-          actionLabel: 'Created Administrator',
-          entityType: 'ADMIN',
-          entityId: newUid,
-          entityName: createFullName.trim(),
-          summary: `Administrator provisioned new admin account "${createFullName.trim()}" (@${cleanUsername})`,
-          details: {
-            summary: 'Administrative account and console access granted',
-            after: {
-              fullName: createFullName.trim(),
-              email: createEmail.trim(),
-              username: cleanUsername,
-              role: 'admin',
             },
           },
           performedBy: {
@@ -1616,7 +1576,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   setShowCreateAccountModal(true);
                 }}
                 className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
-                title="Create a new passenger, driver, or admin account"
+                title="Create a new passenger or driver account"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Account</span>
@@ -3437,7 +3397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">
                 Select Account Role:
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setCreateRole('customer')}
@@ -3462,19 +3422,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <Users className="w-4 h-4" />
                   <span>Driver</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCreateRole('admin')}
-                  className={`py-2 px-2 rounded-xl text-xs font-black uppercase flex flex-col items-center gap-1 border transition-all ${
-                    createRole === 'admin'
-                      ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-md'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Admin</span>
                 </button>
               </div>
             </div>
@@ -3526,25 +3473,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none"
                   />
                 </div>
-
-                {createRole === 'admin' && (
-                  <div className="space-y-1 sm:col-span-2 bg-[#E3F2FD] p-3 rounded-2xl border border-[#0D47A1]/30">
-                    <label className="text-[10px] font-black text-[#0D47A1] uppercase flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Admin Login Username</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. admin2 (default: email prefix)"
-                      value={createUsername}
-                      onChange={(e) => setCreateUsername(e.target.value)}
-                      className="w-full bg-white border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:outline-none"
-                    />
-                    <p className="text-[10px] text-[#0D47A1]/80 mt-0.5">
-                      Allows this administrator to sign in via the custom username login option.
-                    </p>
-                  </div>
-                )}
 
                 {createRole === 'driver' && (
                   <>
@@ -3621,7 +3549,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>Create {createRole === 'admin' ? 'Administrator' : createRole === 'driver' ? 'Driver' : 'Passenger'}</span>
+                      <span>Create {createRole === 'driver' ? 'Driver' : 'Passenger'}</span>
                     </>
                   )}
                 </button>
