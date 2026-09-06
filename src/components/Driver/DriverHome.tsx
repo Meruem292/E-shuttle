@@ -27,7 +27,7 @@ import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../ser
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 
 export const DriverHome: React.FC = () => {
-  const { driverProfile, currentUser } = useAuth();
+  const { driverProfile, currentUser, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
 
   const [availability, setAvailability] = useState<DriverAvailability>(
@@ -223,6 +223,12 @@ export const DriverHome: React.FC = () => {
             Your e-shuttle driver account has been created and is currently awaiting administrator review. Once approved by the administrator, you will be able to go online and accept requests.
           </p>
         </div>
+        <button
+          onClick={() => logout()}
+          className="mt-4 px-6 py-2.5 bg-white hover:bg-slate-50 text-[#0D47A1] border-2 border-[#0D47A1] rounded-xl font-bold text-xs shadow-sm hover:shadow transition-all active:scale-95"
+        >
+          Sign Out
+        </button>
       </div>
     );
   }

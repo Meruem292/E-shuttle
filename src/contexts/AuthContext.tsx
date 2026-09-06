@@ -26,6 +26,30 @@ import { subscribeToEBikes, autoResolveRfidAssignment } from '../services/ebikeS
 import { sanitizeVehicleInfo } from '../utils/sanitizeVehicle';
 import { logActivity } from '../services/activityLogService';
 
+/**
+ * Recursively strips keys with `undefined` values from an object.
+ * Firestore strictly rejects `undefined` values in setDoc and updateDoc.
+ */
+export function sanitizeFirestoreData<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => (typeof item === 'object' && item !== null && item.constructor === Object ? sanitizeFirestoreData(item) : item)) as any;
+  }
+  const clean: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue;
+    } else if (value !== null && typeof value === 'object' && value.constructor === Object) {
+      clean[key] = sanitizeFirestoreData(value);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
@@ -75,7 +99,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // 1b. Global Real-time Hardware RFID Auto-Resolution Listener
-  // Listens continually to E-Bikes and Drivers across the whole app so ESP32 physical RFID taps resolve instantly
   useEffect(() => {
     let globalBikes: EBikeDevice[] = [];
     let globalDrivers: DriverProfile[] = [];
@@ -122,6 +145,141 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  /**
+   * Universal Profile Resolver & Self-Healing Logic
+   * Inspects Firestore for the user's document in both `users` and `drivers`.
+   * If an authenticated account is missing a Firestore document (e.g. from an interrupted
+   * signup or schema failure), this dynamically recovers the account profile so the user
+   * is never stranded in a loading or null-role state.
+   */
+  const syncUserProfile = async (
+    user: User
+  ): Promise<{ role: UserRole; profile: UserProfile | DriverProfile } | null> => {
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userDocRef);
+
+      if (userSnap.exists()) {
+        const uData = userSnap.data() as UserProfile;
+        return { role: uData.role, profile: uData };
+      }
+
+      const driverDocRef = doc(db, 'drivers', user.uid);
+      const driverSnap = await getDoc(driverDocRef);
+
+      if (driverSnap.exists()) {
+        const dData = driverSnap.data() as DriverProfile;
+        const rawVehicle = dData.vehicleInfo || '';
+        const cleanedVehicle = sanitizeVehicleInfo(rawVehicle);
+        dData.vehicleInfo = cleanedVehicle;
+
+        if (
+          rawVehicle.toLowerCase().includes('fleet') ||
+          rawVehicle.toLowerCase().includes('e-bike')
+        ) {
+          updateDoc(driverDocRef, {
+            vehicleInfo: cleanedVehicle,
+            vehicleType: 'E-Shuttle Transit',
+            updatedAt: serverTimestamp(),
+          }).catch(() => {});
+        }
+
+        return { role: 'driver', profile: dData };
+      }
+
+      // Auto-provision master admin if logging in as admin@eshuttle.com
+      const userEmail = (user.email || '').toLowerCase().trim();
+      if (userEmail === 'admin@eshuttle.com') {
+        const adminDoc: UserProfile = {
+          uid: user.uid,
+          role: 'admin',
+          fullName: 'Platform Administrator',
+          email: userEmail,
+          username: 'admin',
+          phone: '+63 917 000 0000',
+          accountStatus: 'APPROVED',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        await setDoc(userDocRef, sanitizeFirestoreData(adminDoc));
+        return { role: 'admin', profile: adminDoc };
+      }
+
+      // Self-Healing for Orphaned Account:
+      // Check if registration intent was driver (via localStorage or email prefix)
+      let intendedRole: 'customer' | 'driver' = 'customer';
+      try {
+        const savedRole = localStorage.getItem('eshuttle_last_reg_role');
+        if (savedRole === 'driver' || userEmail.includes('driver')) {
+          intendedRole = 'driver';
+        }
+      } catch {}
+
+      if (intendedRole === 'driver') {
+        let pendingCardUrl = '';
+        let pendingLicenseNum = '';
+        try {
+          pendingCardUrl = localStorage.getItem('eshuttle_pending_license_url') || '';
+          pendingLicenseNum = localStorage.getItem('eshuttle_pending_license_num') || '';
+        } catch {}
+
+        const recoveredDriverDoc: DriverProfile = {
+          uid: user.uid,
+          role: 'driver',
+          fullName: user.displayName || userEmail.split('@')[0] || 'E-Shuttle Driver',
+          email: userEmail,
+          phone: '+63 900 000 0000',
+          accountStatus: 'PENDING',
+          availability: 'OFFLINE',
+          vehicleType: 'E-Shuttle Transit',
+          vehicleInfo: 'Unassigned E-Shuttle',
+          driverLicenseCardUrl: pendingCardUrl,
+          driverLicenseNumber: pendingLicenseNum,
+          currentLocation: {
+            latitude: 14.5547,
+            longitude: 121.0244,
+            address: 'Central E-Shuttle Hub',
+          },
+          activeBookingId: null,
+          rating: 5.0,
+          totalRides: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(driverDocRef, sanitizeFirestoreData(recoveredDriverDoc));
+        try {
+          localStorage.removeItem('eshuttle_last_reg_role');
+          localStorage.removeItem('eshuttle_pending_license_url');
+          localStorage.removeItem('eshuttle_pending_license_num');
+        } catch {}
+
+        return { role: 'driver', profile: recoveredDriverDoc };
+      } else {
+        const recoveredUserDoc: UserProfile = {
+          uid: user.uid,
+          role: 'customer',
+          fullName: user.displayName || userEmail.split('@')[0] || 'Passenger',
+          email: userEmail,
+          phone: '+63 900 000 0000',
+          accountStatus: 'APPROVED',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(userDocRef, sanitizeFirestoreData(recoveredUserDoc));
+        try {
+          localStorage.removeItem('eshuttle_last_reg_role');
+        } catch {}
+
+        return { role: 'customer', profile: recoveredUserDoc };
+      }
+    } catch (err) {
+      console.error('Error syncing user profile:', err);
+      return null;
+    }
+  };
+
   // 2. Load user/driver profile and subscribe to updates
   useEffect(() => {
     if (!currentUser) {
@@ -138,109 +296,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async function loadProfileAndSubscribe() {
       setLoading(true);
       try {
-        const userDocRef = doc(db, 'users', currentUser!.uid);
-        const userSnap = await getDoc(userDocRef);
+        const synced = await syncUserProfile(currentUser!);
 
         if (isCancelled) return;
 
-        if (userSnap.exists()) {
-          const uData = userSnap.data() as UserProfile;
-          setUserProfile(uData);
-          setRole(uData.role);
-          setDriverProfile(null);
-          setLoading(false);
+        if (synced) {
+          if (synced.role === 'driver') {
+            setDriverProfile(synced.profile as DriverProfile);
+            setUserProfile(null);
+            setRole('driver');
 
-          unsubProfile = onSnapshot(
-            userDocRef,
-            (snap) => {
-              if (snap.exists()) {
-                const updated = snap.data() as UserProfile;
-                setUserProfile(updated);
-                setRole(updated.role);
+            unsubProfile = onSnapshot(
+              doc(db, 'drivers', currentUser!.uid),
+              (snap) => {
+                if (snap.exists()) {
+                  const updated = snap.data() as DriverProfile;
+                  updated.vehicleInfo = sanitizeVehicleInfo(updated.vehicleInfo);
+                  setDriverProfile(updated);
+                }
+              },
+              (err) => {
+                if (err.code !== 'permission-denied') {
+                  console.error('Driver listener error:', err);
+                }
               }
-            },
-            (err) => {
-              if (err.code !== 'permission-denied') {
-                console.error('User listener error:', err);
+            );
+          } else {
+            setUserProfile(synced.profile as UserProfile);
+            setDriverProfile(null);
+            setRole(synced.role);
+
+            unsubProfile = onSnapshot(
+              doc(db, 'users', currentUser!.uid),
+              (snap) => {
+                if (snap.exists()) {
+                  const updated = snap.data() as UserProfile;
+                  setUserProfile(updated);
+                  setRole(updated.role);
+                }
+              },
+              (err) => {
+                if (err.code !== 'permission-denied') {
+                  console.error('User listener error:', err);
+                }
               }
-            }
-          );
-          return;
-        }
-
-        const driverDocRef = doc(db, 'drivers', currentUser!.uid);
-        const driverSnap = await getDoc(driverDocRef);
-
-        if (isCancelled) return;
-
-        if (driverSnap.exists()) {
-          const dData = driverSnap.data() as DriverProfile;
-          const rawVehicle = dData.vehicleInfo || '';
-          const cleanedVehicle = sanitizeVehicleInfo(rawVehicle);
-          dData.vehicleInfo = cleanedVehicle;
-
-          // Auto-migrate legacy document in Firestore if it contained 'fleet' or 'e-bike'
-          if (
-            rawVehicle.toLowerCase().includes('fleet') ||
-            rawVehicle.toLowerCase().includes('e-bike')
-          ) {
-            updateDoc(driverDocRef, {
-              vehicleInfo: cleanedVehicle,
-              vehicleType: 'E-Shuttle Transit',
-              updatedAt: serverTimestamp(),
-            }).catch(() => {});
+            );
           }
-
-          setDriverProfile(dData);
-          setRole('driver');
-          setUserProfile(null);
-          setLoading(false);
-
-          unsubProfile = onSnapshot(
-            driverDocRef,
-            (snap) => {
-              if (snap.exists()) {
-                const updated = snap.data() as DriverProfile;
-                const snapCleaned = sanitizeVehicleInfo(updated.vehicleInfo);
-                updated.vehicleInfo = snapCleaned;
-                setDriverProfile(updated);
-              }
-            },
-            (err) => {
-              if (err.code !== 'permission-denied') {
-                console.error('Driver listener error:', err);
-              }
-            }
-          );
-          return;
         }
-
-        // Auto-provision admin user profile if logging in as admin@eshuttle.com
-        if (currentUser?.email === 'admin@eshuttle.com') {
-          const adminDoc: UserProfile = {
-            uid: currentUser.uid,
-            role: 'admin',
-            fullName: 'Platform Administrator',
-            email: currentUser.email,
-            username: 'admin',
-            phone: '+63 917 000 0000',
-            accountStatus: 'APPROVED',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          await setDoc(userDocRef, adminDoc);
-          setUserProfile(adminDoc);
-          setRole('admin');
-          setLoading(false);
-          return;
-        }
-
-        setLoading(false);
       } catch (err: any) {
         if (err?.code !== 'permission-denied' && !err?.message?.includes('permissions')) {
           console.error('Error fetching user context:', err);
         }
-        if (!isCancelled) setLoading(false);
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     }
 
@@ -259,7 +369,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (clean.includes('@')) {
       return clean;
     }
-    
+
     if (clean === 'admin') {
       return 'admin@eshuttle.com';
     }
@@ -293,18 +403,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (emailOrUsername: string, pass: string) => {
     setLoading(true);
-    const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
-    const res = await signInWithEmailAndPassword(auth, resolvedEmail, pass);
-    logActivity({
-      action: 'AUTH_LOGIN',
-      actionLabel: 'User Signed In',
-      entityType: 'AUTH',
-      entityId: res.user.uid,
-      entityName: resolvedEmail,
-      summary: `User "${resolvedEmail}" logged into system`,
-      performedBy: { uid: res.user.uid, name: res.user.displayName || resolvedEmail, email: resolvedEmail },
-      severity: 'info',
-    }).catch(() => {});
+    try {
+      const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
+      const res = await signInWithEmailAndPassword(auth, resolvedEmail, pass);
+
+      // Instantly synchronize user profile and set appropriate role
+      const synced = await syncUserProfile(res.user);
+      if (synced) {
+        if (synced.role === 'driver') {
+          setDriverProfile(synced.profile as DriverProfile);
+          setUserProfile(null);
+          setRole('driver');
+        } else {
+          setUserProfile(synced.profile as UserProfile);
+          setDriverProfile(null);
+          setRole(synced.role);
+        }
+      }
+
+      logActivity({
+        action: 'AUTH_LOGIN',
+        actionLabel: 'User Signed In',
+        entityType: 'AUTH',
+        entityId: res.user.uid,
+        entityName: resolvedEmail,
+        summary: `User "${resolvedEmail}" logged into system`,
+        performedBy: { uid: res.user.uid, name: res.user.displayName || resolvedEmail, email: resolvedEmail },
+        severity: 'info',
+      }).catch(() => {});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signInAdmin = async (emailOrUsername: string, pass: string) => {
@@ -315,7 +444,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userDocRef = doc(db, 'users', res.user.uid);
       const userSnap = await getDoc(userDocRef);
 
-      const isAdminEmail = res.user.email === 'admin@eshuttle.com' || resolvedEmail.trim().toLowerCase() === 'admin@eshuttle.com';
+      const isAdminEmail =
+        res.user.email?.toLowerCase() === 'admin@eshuttle.com' ||
+        resolvedEmail.trim().toLowerCase() === 'admin@eshuttle.com';
       const isRoleAdmin = userSnap.exists() && userSnap.data()?.role === 'admin';
 
       if (!isAdminEmail && !isRoleAdmin) {
@@ -338,8 +469,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
-        await setDoc(userDocRef, adminDoc);
+        await setDoc(userDocRef, sanitizeFirestoreData(adminDoc));
         setUserProfile(adminDoc);
+        setDriverProfile(null);
         setRole('admin');
 
         logActivity({
@@ -356,6 +488,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           performedBy: { uid: res.user.uid, name: 'Platform Administrator', email: resolvedEmail, role: 'admin' },
           severity: 'success',
         }).catch(() => {});
+      } else if (userSnap.exists()) {
+        const uData = userSnap.data() as UserProfile;
+        setUserProfile(uData);
+        setDriverProfile(null);
+        setRole('admin');
       }
 
       logActivity({
@@ -385,36 +522,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pass: string
   ) => {
     setLoading(true);
-    const res = await createUserWithEmailAndPassword(auth, email, pass);
-    const userDoc: UserProfile = {
-      uid: res.user.uid,
-      role: 'customer',
-      fullName,
-      email,
-      phone,
-      accountStatus: 'APPROVED',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'users', res.user.uid), userDoc);
-    setUserProfile(userDoc);
-    setRole('customer');
-    setLoading(false);
+    try {
+      localStorage.setItem('eshuttle_last_reg_role', 'customer');
+    } catch {}
 
-    logActivity({
-      action: 'AUTH_REGISTER',
-      actionLabel: 'Registered Passenger Account',
-      entityType: 'USER',
-      entityId: res.user.uid,
-      entityName: fullName,
-      summary: `New passenger registered: "${fullName}" (${email})`,
-      details: {
-        summary: `Customer registered account with phone ${phone}`,
-        after: { uid: res.user.uid, fullName, email, phone, role: 'customer' },
-      },
-      performedBy: { uid: res.user.uid, name: fullName, email, role: 'customer' },
-      severity: 'success',
-    }).catch(() => {});
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      let userUid: string;
+
+      try {
+        const res = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+        userUid = res.user.uid;
+      } catch (authErr: any) {
+        // Self-healing: If user already exists in Firebase Auth, sign in and complete profile
+        if (authErr?.code === 'auth/email-already-in-use') {
+          try {
+            const signInRes = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+            userUid = signInRes.user.uid;
+          } catch {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      const userDoc: UserProfile = {
+        uid: userUid,
+        role: 'customer',
+        fullName: fullName.trim(),
+        email: cleanEmail,
+        phone: phone.trim() || '+63 900 000 0000',
+        accountStatus: 'APPROVED',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'users', userUid), sanitizeFirestoreData(userDoc));
+      setUserProfile(userDoc);
+      setDriverProfile(null);
+      setRole('customer');
+
+      try {
+        localStorage.removeItem('eshuttle_last_reg_role');
+      } catch {}
+
+      logActivity({
+        action: 'AUTH_REGISTER',
+        actionLabel: 'Registered Passenger Account',
+        entityType: 'USER',
+        entityId: userUid,
+        entityName: fullName.trim(),
+        summary: `New passenger registered: "${fullName.trim()}" (${cleanEmail})`,
+        details: {
+          summary: `Customer registered account with phone ${phone.trim()}`,
+          after: { uid: userUid, fullName: fullName.trim(), email: cleanEmail, phone: phone.trim(), role: 'customer' },
+        },
+        performedBy: { uid: userUid, name: fullName.trim(), email: cleanEmail, role: 'customer' },
+        severity: 'success',
+      }).catch(() => {});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signUpDriver = async (
@@ -428,69 +597,114 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     driverLicenseNumber?: string
   ) => {
     setLoading(true);
-    const res = await createUserWithEmailAndPassword(auth, email, pass);
-    const driverDoc: DriverProfile = {
-      uid: res.user.uid,
-      role: 'driver',
-      fullName,
-      email,
-      phone,
-      accountStatus: 'PENDING', // Drivers start as PENDING requiring Admin approval
-      availability: 'OFFLINE',
-      vehicleType,
-      vehicleInfo,
-      driverLicenseCardUrl: driverLicenseCardUrl || undefined,
-      driverLicenseNumber: driverLicenseNumber || undefined,
-      currentLocation: {
-        latitude: 14.5547,
-        longitude: 121.0244,
-        address: 'Central E-Shuttle Hub',
-      },
-      activeBookingId: null,
-      rating: 5.0,
-      totalRides: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'drivers', res.user.uid), driverDoc);
+    // Cache pending driver intent
     try {
-      await deleteDoc(doc(db, 'users', res.user.uid));
-    } catch {
-      // ignore
-    }
-    setDriverProfile(driverDoc);
-    setRole('driver');
-    setLoading(false);
+      localStorage.setItem('eshuttle_last_reg_role', 'driver');
+      if (driverLicenseCardUrl) localStorage.setItem('eshuttle_pending_license_url', driverLicenseCardUrl);
+      if (driverLicenseNumber) localStorage.setItem('eshuttle_pending_license_num', driverLicenseNumber);
+    } catch {}
 
-    logActivity({
-      action: 'AUTH_REGISTER',
-      actionLabel: 'Applied as Driver',
-      entityType: 'DRIVER',
-      entityId: res.user.uid,
-      entityName: fullName,
-      summary: `New driver registered application: "${fullName}" (${email}) - Pending Admin Verification`,
-      details: {
-        summary: `Driver application submitted with license ${driverLicenseNumber || 'N/A'}`,
-        after: { uid: res.user.uid, fullName, email, phone, role: 'driver', accountStatus: 'PENDING' },
-      },
-      performedBy: { uid: res.user.uid, name: fullName, email, role: 'driver' },
-      severity: 'warning',
-    }).catch(() => {});
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      let userUid: string;
+
+      try {
+        const res = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+        userUid = res.user.uid;
+      } catch (authErr: any) {
+        // Self-healing: If user already exists in Firebase Auth (e.g. earlier failed setDoc attempt),
+        // sign in with the password and proceed to save the driver profile document
+        if (authErr?.code === 'auth/email-already-in-use') {
+          try {
+            const signInRes = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+            userUid = signInRes.user.uid;
+          } catch {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      const driverDoc: DriverProfile = {
+        uid: userUid,
+        role: 'driver',
+        fullName: fullName.trim(),
+        email: cleanEmail,
+        phone: phone.trim() || '+63 900 000 0000',
+        accountStatus: 'PENDING', // Drivers start as PENDING requiring Admin approval
+        availability: 'OFFLINE',
+        vehicleType: vehicleType || 'E-Shuttle Transit',
+        vehicleInfo: vehicleInfo || 'Unassigned E-Shuttle',
+        driverLicenseCardUrl: (driverLicenseCardUrl || '').trim(),
+        driverLicenseNumber: (driverLicenseNumber || '').trim(),
+        currentLocation: {
+          latitude: 14.5547,
+          longitude: 121.0244,
+          address: 'Central E-Shuttle Hub',
+        },
+        activeBookingId: null,
+        rating: 5.0,
+        totalRides: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'drivers', userUid), sanitizeFirestoreData(driverDoc));
+      try {
+        await deleteDoc(doc(db, 'users', userUid));
+      } catch {}
+
+      try {
+        localStorage.removeItem('eshuttle_last_reg_role');
+        localStorage.removeItem('eshuttle_pending_license_url');
+        localStorage.removeItem('eshuttle_pending_license_num');
+      } catch {}
+
+      setDriverProfile(driverDoc);
+      setUserProfile(null);
+      setRole('driver');
+
+      logActivity({
+        action: 'AUTH_REGISTER',
+        actionLabel: 'Applied as Driver',
+        entityType: 'DRIVER',
+        entityId: userUid,
+        entityName: fullName.trim(),
+        summary: `New driver registered application: "${fullName.trim()}" (${cleanEmail}) - Pending Admin Verification`,
+        details: {
+          summary: `Driver application submitted with license ${driverLicenseNumber?.trim() || 'N/A'}`,
+          after: { uid: userUid, fullName: fullName.trim(), email: cleanEmail, phone: phone.trim(), role: 'driver', accountStatus: 'PENDING' },
+        },
+        performedBy: { uid: userUid, name: fullName.trim(), email: cleanEmail, role: 'driver' },
+        severity: 'warning',
+      }).catch(() => {});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
   };
 
   const logout = async () => {
     const prevUser = currentUser;
     const prevProfile = userProfile || driverProfile;
     setLoading(true);
-    await firebaseSignOut(auth);
-    setUserProfile(null);
-    setDriverProfile(null);
-    setRole(null);
-    setLoading(false);
+    try {
+      try {
+        localStorage.removeItem('eshuttle_last_reg_role');
+        localStorage.removeItem('eshuttle_pending_license_url');
+        localStorage.removeItem('eshuttle_pending_license_num');
+      } catch {}
+      await firebaseSignOut(auth);
+      setUserProfile(null);
+      setDriverProfile(null);
+      setRole(null);
+    } finally {
+      setLoading(false);
+    }
 
     if (prevUser) {
       const isAdmin = prevProfile?.role === 'admin' || prevUser.email === 'admin@eshuttle.com';
@@ -507,7 +721,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid: prevUser.uid,
           name: prevProfile?.fullName || (isAdmin ? 'Platform Administrator' : 'User'),
           email: prevUser.email || undefined,
-          role: isAdmin ? 'admin' : (prevProfile?.role || 'user'),
+          role: isAdmin ? 'admin' : (prevProfile?.role || 'customer'),
         },
         severity: 'info',
       }).catch(() => {});
@@ -554,3 +768,4 @@ export function useAuth() {
   }
   return context;
 }
+

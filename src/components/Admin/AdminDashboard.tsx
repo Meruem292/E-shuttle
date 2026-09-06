@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, sanitizeFirestoreData } from '../../contexts/AuthContext';
 import { AdminSettings, DriverProfile, UserProfile, Booking } from '../../types';
 import { DEFAULT_FARE_SETTINGS } from '../../constants/fare';
 import { EBikeManagement } from './EBikeManagement';
@@ -617,14 +617,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           driverLicenseNumber: createLicenseNumber.trim() || 'DL-' + Math.floor(100000 + Math.random() * 900000),
           zoneId: createZoneId || null,
           zoneName: selectedZone?.name || null,
-          rfidCardUid: createRfidUid.trim().toUpperCase() || undefined,
+          rfidCardUid: createRfidUid.trim().toUpperCase() || null,
           rating: 5.0,
           totalRides: 0,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
 
-        await setDoc(doc(db, 'drivers', newUid), driverDoc);
+        await setDoc(doc(db, 'drivers', newUid), sanitizeFirestoreData(driverDoc));
 
         logActivity({
           action: 'CREATE',
