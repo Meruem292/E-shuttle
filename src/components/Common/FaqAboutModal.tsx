@@ -21,6 +21,9 @@ import {
   AlertCircle,
   Award,
   Search,
+  BookOpen,
+  CheckCircle2,
+  Cpu,
 } from 'lucide-react';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
@@ -30,7 +33,7 @@ import cctLogo from '../../images/cct_logo.jpg';
 interface FaqAboutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'faqs' | 'routes' | 'history' | 'about';
+  defaultTab?: 'guide' | 'faqs' | 'routes' | 'history' | 'about';
 }
 
 export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
@@ -39,7 +42,8 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
   defaultTab = 'faqs',
 }) => {
   const { logoUrl: appLogo } = useAppLogo();
-  const [activeTab, setActiveTab] = useState<'faqs' | 'routes' | 'history' | 'about'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'guide' | 'faqs' | 'routes' | 'history' | 'about'>(defaultTab);
+  const [guideRole, setGuideRole] = useState<'passenger' | 'driver'>('passenger');
   const [expandedFaq, setExpandedFaq] = useState<string | null>('free_shuttle');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -186,55 +190,172 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
         </div>
 
         {/* Tab Selection */}
-        <div className="bg-[#E3F2FD] border-b border-[#0D47A1]/20 p-2 grid grid-cols-4 gap-1 text-[#0D47A1] shrink-0 font-bold text-xs">
+        <div className="bg-[#E3F2FD] border-b border-[#0D47A1]/20 p-2 grid grid-cols-5 gap-1 text-[#0D47A1] shrink-0 font-bold text-xs">
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`py-2 px-1 sm:px-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
+              activeTab === 'guide'
+                ? 'bg-[#0D47A1] text-white font-extrabold shadow'
+                : 'hover:bg-[#90CAF9]/40 text-[#0D47A1]'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="truncate">How to Use</span>
+          </button>
           <button
             onClick={() => setActiveTab('faqs')}
-            className={`py-2 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1 transition-all ${
+            className={`py-2 px-1 sm:px-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
               activeTab === 'faqs'
                 ? 'bg-[#0D47A1] text-white font-extrabold shadow'
                 : 'hover:bg-[#90CAF9]/40 text-[#0D47A1]'
             }`}
           >
-            <HelpCircle className="w-4 h-4" />
+            <HelpCircle className="w-3.5 h-3.5" />
             <span className="truncate">FAQs</span>
           </button>
           <button
             onClick={() => setActiveTab('routes')}
-            className={`py-2 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1 transition-all ${
+            className={`py-2 px-1 sm:px-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
               activeTab === 'routes'
                 ? 'bg-[#0D47A1] text-white font-extrabold shadow'
                 : 'hover:bg-[#90CAF9]/40 text-[#0D47A1]'
             }`}
           >
-            <Bus className="w-4 h-4" />
+            <Bus className="w-3.5 h-3.5" />
             <span className="truncate">Routes</span>
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`py-2 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1 transition-all ${
+            className={`py-2 px-1 sm:px-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
               activeTab === 'history'
                 ? 'bg-[#0D47A1] text-white font-extrabold shadow'
                 : 'hover:bg-[#90CAF9]/40 text-[#0D47A1]'
             }`}
           >
-            <Newspaper className="w-4 h-4" />
+            <Newspaper className="w-3.5 h-3.5" />
             <span className="truncate">History</span>
           </button>
           <button
             onClick={() => setActiveTab('about')}
-            className={`py-2 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1 transition-all ${
+            className={`py-2 px-1 sm:px-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
               activeTab === 'about'
                 ? 'bg-[#0D47A1] text-white font-extrabold shadow'
                 : 'hover:bg-[#90CAF9]/40 text-[#0D47A1]'
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span className="truncate">About Us</span>
+            <Users className="w-3.5 h-3.5" />
+            <span className="truncate">About</span>
           </button>
         </div>
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+          {/* TAB 0: HOW TO USE (SIMPLE WALKTHROUGH) */}
+          {activeTab === 'guide' && (
+            <div className="space-y-4">
+              {/* Role Toggle */}
+              <div className="flex items-center justify-center gap-2 p-1 bg-white border border-[#0D47A1]/20 rounded-2xl shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setGuideRole('passenger')}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    guideRole === 'passenger'
+                      ? 'bg-[#0D47A1] text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Passenger / Commuter Guide</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuideRole('driver')}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    guideRole === 'driver'
+                      ? 'bg-[#0D47A1] text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Bus className="w-3.5 h-3.5" />
+                  <span>Driver Guide</span>
+                </button>
+              </div>
+
+              {guideRole === 'passenger' ? (
+                <div className="space-y-3">
+                  <div className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-amber-400 text-slate-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                      Step 1
+                    </span>
+                    <h4 className="text-sm font-black text-[#0D47A1]">Select Your Pickup & Drop-off</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Choose your nearest official shuttle station along the route (e.g., City Hall, Olivarez Plaza, Tagaytay National High School) and set your group size.
+                    </p>
+                  </div>
+
+                  <div className="bg-white border-2 border-emerald-500 rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-300">
+                      Step 2
+                    </span>
+                    <h4 className="text-sm font-black text-emerald-800">Request a 100% Free Ride</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Tap &quot;Book Free Ride&quot;. There is NO fare, payment, or credit card required. The nearest available electric shuttle on duty will be automatically dispatched.
+                    </p>
+                  </div>
+
+                  <div className="bg-white border-2 border-indigo-500 rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-indigo-300">
+                      Step 3
+                    </span>
+                    <h4 className="text-sm font-black text-indigo-800">Track Shuttle & Hop Aboard</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Watch the e-shuttle arrive on your live GPS map. Hop aboard safely when it pulls into the station bay, and enjoy your quiet, eco-friendly trip!
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Safety Tip:</strong> An Emergency SOS button is always available in the app during your trip if you ever need urgent support.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-white border-2 border-purple-500 rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-purple-100 text-purple-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-purple-300">
+                      Step 1
+                    </span>
+                    <h4 className="text-sm font-black text-purple-800">Tap In with RFID or Go Online</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Tap your issued RFID card against the onboard scanner or tap &quot;Start Shift&quot; in the driver app to mark your e-shuttle available for service.
+                    </p>
+                  </div>
+
+                  <div className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-blue-100 text-blue-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-blue-300">
+                      Step 2
+                    </span>
+                    <h4 className="text-sm font-black text-[#0D47A1]">Receive Passenger Pickups</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      When waiting commuters request a ride at a stop along your corridor, an alert sounds with their station stop and passenger count.
+                    </p>
+                  </div>
+
+                  <div className="bg-white border-2 border-emerald-500 rounded-2xl p-4 space-y-1 shadow-sm">
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-300">
+                      Step 3
+                    </span>
+                    <h4 className="text-sm font-black text-emerald-800">Complete Trip & Safe Drop-off</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Drop off riders at their designated station, tap &quot;Complete Trip&quot;, and your shuttle is immediately ready for subsequent commuters.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB 1: FAQs */}
           {activeTab === 'faqs' && (
             <div className="space-y-4">

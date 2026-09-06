@@ -291,10 +291,10 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
               <button
                 onClick={onOpenTutorial}
                 className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"
-                title="Launch interactive tutorial and backtracking guide"
+                title="Open simple walkthrough: How to use E-Shuttle"
               >
                 <BookOpen className="w-3.5 h-3.5 text-slate-900" />
-                <span>Tutorial & Guide</span>
+                <span>How to Use</span>
               </button>
             )}
 

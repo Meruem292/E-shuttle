@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight, Upload, Sparkles, CheckCircle, ShieldCheck, X, FileCheck } from 'lucide-react';
+import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight, Upload, Sparkles, CheckCircle, ShieldCheck, X, FileCheck, BookOpen } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
@@ -16,13 +16,13 @@ export const DriverProfile: React.FC = () => {
   const { currentUser, driverProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
-  const [faqTab, setFaqTab] = useState<'faqs' | 'routes' | 'history' | 'about'>('faqs');
+  const [faqTab, setFaqTab] = useState<'guide' | 'faqs' | 'routes' | 'history' | 'about'>('faqs');
   const [isUploadingLicense, setIsUploadingLicense] = useState<boolean>(false);
   const [ocrStatus, setOcrStatus] = useState<string>('');
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [verificationResult, setVerificationResult] = useState<LicenseVerificationResult | null>(null);
 
-  const openFaqTab = (tab: 'faqs' | 'routes' | 'history' | 'about') => {
+  const openFaqTab = (tab: 'guide' | 'faqs' | 'routes' | 'history' | 'about') => {
     setFaqTab(tab);
     setIsFaqOpen(true);
   };
@@ -318,6 +318,23 @@ export const DriverProfile: React.FC = () => {
             Driver Manual
           </span>
         </div>
+
+        {/* Simple Driver Walkthrough Button */}
+        <button
+          onClick={() => openFaqTab('guide')}
+          className="w-full p-3 bg-amber-400 hover:bg-amber-300 text-slate-900 border-2 border-amber-500 rounded-2xl flex items-center justify-between transition-all text-left shadow-sm group active:scale-98"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="block font-black text-xs uppercase tracking-tight">How to Use (Driver Guide)</span>
+              <span className="block text-[11px] text-slate-800 font-medium">3 simple steps: RFID tap, pickups & trips</span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-800 group-hover:translate-x-0.5 transition-transform" />
+        </button>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <button

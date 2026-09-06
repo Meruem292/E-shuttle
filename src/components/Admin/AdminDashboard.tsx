@@ -1317,10 +1317,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               setIsTutorialOpen(true);
             }}
             className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 border-2 border-amber-500 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
-            title="Open Interactive Administrator Tutorial & Backtracking Masterclass"
+            title="Open Simple Walkthrough: How to use E-Shuttle"
           >
             <BookOpen className="w-3.5 h-3.5 text-slate-900" />
-            <span className="hidden sm:inline">Admin Tutorial</span>
+            <span className="hidden sm:inline">How to Use</span>
           </button>
 
           <button
@@ -1350,27 +1350,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
          ========================================================================= */}
       {currentTab === 'dashboard' && (
         <div className="space-y-5 animate-in fade-in duration-200">
-          {/* Welcome & Interactive Tutorial Banner */}
+          {/* Welcome & Simple Walkthrough Banner */}
           {!isTutorialBannerDismissed && (
             <div className="bg-gradient-to-r from-[#0D47A1] via-[#1565C0] to-[#0D47A1] text-white p-4 sm:p-5 rounded-3xl border-2 border-[#0D47A1] shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
               <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
 
               <div className="flex items-start sm:items-center gap-3.5 z-10">
                 <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-900 flex items-center justify-center shrink-0 shadow-lg font-black">
-                  <GraduationCap className="w-6 h-6" />
+                  <BookOpen className="w-6 h-6" />
                 </div>
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full shadow-xs">
-                      Admin Onboarding & Guide
+                      Quick Guide
                     </span>
-                    <span className="text-xs text-blue-200 font-bold">New to the Tagbilaran E-Shuttle Hub?</span>
+                    <span className="text-xs text-blue-200 font-bold">New to the Tagaytay E-Shuttle Hub?</span>
                   </div>
                   <h2 className="text-base sm:text-lg font-black text-white">
-                    Interactive Walkthrough: Fleet Ops & CRUD Backtracking
+                    Simple Walkthrough: How to Use E-Shuttle
                   </h2>
                   <p className="text-xs text-blue-100 font-medium max-w-2xl leading-relaxed">
-                    Learn how to manage geofenced zones, pair contactless RFID cards, vet drivers, dispatch live shuttles, and use the <strong>Activity Logs engine to backtrack changes and recover prior states</strong>.
+                    Learn how to monitor active shuttles on the road, manage drivers & RFID cards, and assist passengers with a straightforward, step-by-step walkthrough.
                   </p>
                 </div>
               </div>
@@ -1384,18 +1384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="flex-1 md:flex-initial px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase rounded-xl flex items-center justify-center gap-1.5 active:scale-95 shadow-md transition-all"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  <span>Start Tutorial</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setTutorialInitialStep(6);
-                    setIsTutorialOpen(true);
-                  }}
-                  className="flex-1 md:flex-initial px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/30 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                >
-                  <Database className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Backtracking Guide</span>
+                  <span>Start Walkthrough</span>
                 </button>
 
                 <button
@@ -3522,7 +3511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {(currentTab === 'logs' || currentTab === 'audit') && (
         <ActivityLogsView
           onOpenTutorial={() => {
-            setTutorialInitialStep(6);
+            setTutorialInitialStep(4);
             setIsTutorialOpen(true);
           }}
         />
