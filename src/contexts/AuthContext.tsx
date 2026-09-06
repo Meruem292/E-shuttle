@@ -25,7 +25,7 @@ import { UserProfile, DriverProfile, UserRole, AccountStatus, EBikeDevice } from
 import { subscribeToEBikes, autoResolveRfidAssignment } from '../services/ebikeService';
 import { sanitizeVehicleInfo } from '../utils/sanitizeVehicle';
 import { logActivity } from '../services/activityLogService';
-import { isValidEmail } from '../utils/validation';
+import { isValidEmail, isValidPhoneNumber, isValidDriverLicense, isValidFullName } from '../utils/validation';
 
 /**
  * Recursively strips keys with `undefined` values from an object.
@@ -528,9 +528,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     try {
+      const cleanFullName = fullName.trim();
+      if (!isValidFullName(cleanFullName)) {
+        throw new Error('Please enter a valid full name with letters only (e.g., Maria Santos). Numbers and special symbols are not allowed.');
+      }
       const cleanEmail = email.trim().toLowerCase();
       if (!isValidEmail(cleanEmail)) {
         throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+      }
+      if (!isValidPhoneNumber(phone)) {
+        throw new Error('Please enter a valid mobile phone number without alphabet characters (e.g., 0917 123 4567).');
       }
       let userUid: string;
 
@@ -609,9 +616,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     try {
+      const cleanFullName = fullName.trim();
+      if (!isValidFullName(cleanFullName)) {
+        throw new Error('Please enter a valid full name with letters only (e.g., Maria Santos). Numbers and special symbols are not allowed.');
+      }
       const cleanEmail = email.trim().toLowerCase();
       if (!isValidEmail(cleanEmail)) {
         throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+      }
+      if (!isValidPhoneNumber(phone)) {
+        throw new Error('Please enter a valid mobile phone number without alphabet characters (e.g., 0917 123 4567).');
+      }
+      if (driverLicenseNumber && !isValidDriverLicense(driverLicenseNumber)) {
+        throw new Error('Must follow legitimate LTO format: Letter + 2 digits - 2 digits - 6 digits (e.g., N01-23-456789).');
       }
       let userUid: string;
 

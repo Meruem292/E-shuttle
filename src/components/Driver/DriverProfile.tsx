@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight } from 'lucide-react';
+import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight, Upload, Sparkles, CheckCircle, ShieldCheck, X, FileCheck } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
@@ -9,16 +9,60 @@ import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
+import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 
 export const DriverProfile: React.FC = () => {
   const { currentUser, driverProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
   const [faqTab, setFaqTab] = useState<'faqs' | 'routes' | 'history' | 'about'>('faqs');
+  const [isUploadingLicense, setIsUploadingLicense] = useState<boolean>(false);
+  const [ocrStatus, setOcrStatus] = useState<string>('');
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
+  const [verificationResult, setVerificationResult] = useState<LicenseVerificationResult | null>(null);
 
   const openFaqTab = (tab: 'faqs' | 'routes' | 'history' | 'about') => {
     setFaqTab(tab);
     setIsFaqOpen(true);
+  };
+
+  const handleLicenseCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+
+    setIsUploadingLicense(true);
+    setOcrProgress(5);
+    setOcrStatus('Initializing OCR reader...');
+    setVerificationResult(null);
+
+    try {
+      const [uploadRes, ocrResult] = await Promise.all([
+        uploadDriverLicenseToFirebaseStorage(file),
+        verifyDriverLicenseImage(file, (status, progress) => {
+          setOcrStatus(status);
+          setOcrProgress(progress);
+        }),
+      ]);
+
+      setVerificationResult(ocrResult);
+
+      if (uploadRes.success && uploadRes.url) {
+        const updates: Record<string, any> = {
+          driverLicenseCardUrl: uploadRes.url,
+        };
+
+        if (ocrResult.isOfficialLTO && ocrResult.detectedLicenseNumber && !driverProfile?.driverLicenseNumber) {
+          updates.driverLicenseNumber = ocrResult.detectedLicenseNumber;
+        }
+
+        await updateDoc(doc(db, 'drivers', currentUser.uid), updates);
+      }
+    } catch (err: any) {
+      console.error('License upload error:', err);
+    } finally {
+      setIsUploadingLicense(false);
+    }
   };
 
   const handleDismissNotice = async () => {
@@ -159,33 +203,91 @@ export const DriverProfile: React.FC = () => {
           )}
 
           {driverProfile?.driverLicenseCardUrl ? (
-            <div className="relative w-full h-32 bg-slate-100 rounded-xl overflow-hidden border border-[#0D47A1]">
-              <img
-                src={driverProfile.driverLicenseCardUrl}
-                alt="Driver License Card"
-                className="w-full h-full object-cover"
-              />
+            <div className="space-y-2">
+              <div className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-sm">
+                <img
+                  src={driverProfile.driverLicenseCardUrl}
+                  alt="Driver License Card"
+                  className="w-full h-full object-cover"
+                />
+                <label className="absolute bottom-2 right-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer shadow flex items-center gap-1">
+                  <Upload className="w-3 h-3" />
+                  <span>Replace Photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isUploadingLicense}
+                    onChange={handleLicenseCardUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {verificationResult && (
+                verificationResult.isOfficialLTO ? (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-1.5 text-emerald-900 text-xs">
+                    <div className="flex items-center gap-1.5 font-extrabold text-emerald-700">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span>Official LTO License Verified</span>
+                      <span className="ml-auto text-[10px] bg-emerald-200/70 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                        {verificationResult.confidence}% Confidence
+                      </span>
+                    </div>
+                    {verificationResult.detectedLicenseNumber && (
+                      <div className="flex items-center justify-between text-[11px] bg-white/90 p-1.5 rounded-lg border border-emerald-200 font-mono">
+                        <span className="text-emerald-800">Detected on Card:</span>
+                        <span className="font-extrabold text-emerald-950">{verificationResult.detectedLicenseNumber}</span>
+                      </div>
+                    )}
+                    <div className="text-[10px] text-emerald-700 flex flex-wrap gap-1 items-center pt-0.5">
+                      <span className="font-semibold">Security Markers:</span>
+                      {verificationResult.matchedKeywords.slice(0, 3).map((kw) => (
+                        <span key={kw} className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                          ✓ {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-800">Automated Pre-Check Notice</p>
+                      <p className="text-[10px]">{verificationResult.feedbackMessage}</p>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          ) : isUploadingLicense ? (
+            <div className="p-4 bg-white border-2 border-dashed border-[#0D47A1] rounded-2xl flex flex-col items-center justify-center space-y-2">
+              <Sparkles className="w-5 h-5 animate-spin text-[#0D47A1]" />
+              <div className="text-center">
+                <span className="text-xs font-bold text-[#0D47A1] block">
+                  Scanning Card Photo...
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {ocrStatus || 'Running OCR pre-check...'} ({ocrProgress}%)
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-[#0D47A1] h-full transition-all duration-300"
+                  style={{ width: `${Math.max(5, ocrProgress)}%` }}
+                />
+              </div>
             </div>
           ) : (
             <label className="block p-3 bg-white border border-dashed border-[#0D47A1] rounded-xl text-center cursor-pointer hover:bg-[#E3F2FD] transition-colors">
+              <Upload className="w-5 h-5 text-[#0D47A1] mx-auto mb-1" />
               <span className="text-xs font-bold text-[#0D47A1] block">Upload Driver's License Photo</span>
-              <span className="text-[10px] text-slate-400">Required for admin profile verification</span>
+              <span className="text-[10px] text-slate-400">Required for official admin profile verification</span>
               <input
                 type="file"
                 accept="image/*"
+                disabled={isUploadingLicense}
                 className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file || !currentUser) return;
-                  const reader = new FileReader();
-                  reader.onload = async (ev) => {
-                    const dataUrl = ev.target?.result as string;
-                    await updateDoc(doc(db, 'drivers', currentUser.uid), {
-                      driverLicenseCardUrl: dataUrl,
-                    });
-                  };
-                  reader.readAsDataURL(file);
-                }}
+                onChange={handleLicenseCardUpload}
               />
             </label>
           )}

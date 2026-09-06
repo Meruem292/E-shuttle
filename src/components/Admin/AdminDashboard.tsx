@@ -26,7 +26,23 @@ import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../serv
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
-import { isValidEmail, getEmailValidationError } from '../../utils/validation';
+import {
+  isValidEmail,
+  getEmailValidationError,
+  isValidPhoneNumber,
+  getPhoneValidationError,
+  formatPhoneNumber,
+  isValidDriverLicense,
+  getDriverLicenseValidationError,
+  formatDriverLicense,
+  isValidFullName,
+  getFullNameValidationError,
+  formatFullName,
+  isValidRfidUid,
+  getRfidValidationError,
+  formatRfidUid,
+} from '../../utils/validation';
+import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
 import { ChatDrawer } from '../Common/ChatDrawer';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import {
@@ -129,6 +145,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const cleanUsername = profileUsername.trim().toLowerCase() || 'admin';
       const cleanFullName = profileFullName.trim() || 'Platform Administrator';
       const cleanPhone = profilePhone.trim();
+
+      if (cleanPhone) {
+        const phoneErr = getPhoneValidationError(cleanPhone);
+        if (phoneErr) {
+          setProfileMsg({ type: 'error', text: phoneErr });
+          return;
+        }
+      }
 
       const userDocRef = doc(db, 'users', currentUser.uid);
       const updatedData = {
@@ -401,6 +425,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // RFID Pairing Modal State
   const [rfidModalDriver, setRfidModalDriver] = useState<DriverProfile | null>(null);
   const [modalRfidInput, setModalRfidInput] = useState('');
+  const [modalRfidError, setModalRfidError] = useState<string | null>(null);
   const [modalPairing, setModalPairing] = useState(false);
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');
   const [targetRfidDriverId, setTargetRfidDriverId] = useState<string | null>(null);
@@ -412,6 +437,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedDriverModal, setSelectedDriverModal] = useState<DriverProfile | null>(null);
   const [selectedBookingModal, setSelectedBookingModal] = useState<Booking | null>(null);
   const [licensePreviewUrl, setLicensePreviewUrl] = useState<string | null>(null);
+  const [adminOcrScanning, setAdminOcrScanning] = useState(false);
+  const [adminOcrProgress, setAdminOcrProgress] = useState(0);
+  const [adminOcrResult, setAdminOcrResult] = useState<LicenseVerificationResult | null>(null);
 
   // Incident Tickets & Support Channels State
   const [supportChannels, setSupportChannels] = useState<ChatChannel[]>([]);
@@ -598,10 +626,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    const nameErr = getFullNameValidationError(createFullName.trim());
+    if (nameErr) {
+      setCreateError(nameErr);
+      return;
+    }
+
     const emailFormatErr = getEmailValidationError(createEmail.trim());
     if (emailFormatErr) {
       setCreateError(emailFormatErr);
       return;
+    }
+
+    if (createPhone.trim()) {
+      const phoneErr = getPhoneValidationError(createPhone.trim());
+      if (phoneErr) {
+        setCreateError(phoneErr);
+        return;
+      }
+    }
+
+    if (createRole === 'driver') {
+      if (!createLicenseNumber.trim()) {
+        setCreateError("Driver's License Number is required for driver accounts.");
+        return;
+      }
+      const licenseErr = getDriverLicenseValidationError(createLicenseNumber.trim());
+      if (licenseErr) {
+        setCreateError(licenseErr);
+        return;
+      }
+      if (createRfidUid.trim()) {
+        const rfidErr = getRfidValidationError(createRfidUid.trim());
+        if (rfidErr) {
+          setCreateError(rfidErr);
+          return;
+        }
+      }
     }
 
     setCreatingAccount(true);
@@ -622,7 +683,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           availability: 'OFFLINE',
           vehicleType: 'E-Shuttle',
           vehicleInfo: createVehicleInfo.trim() || 'Official City E-Shuttle',
-          driverLicenseNumber: createLicenseNumber.trim() || 'DL-' + Math.floor(100000 + Math.random() * 900000),
+          driverLicenseNumber: createLicenseNumber.trim().toUpperCase(),
           zoneId: createZoneId || null,
           zoneName: selectedZone?.name || null,
           rfidCardUid: createRfidUid.trim().toUpperCase() || null,
@@ -969,18 +1030,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveRfidInModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rfidModalDriver || !modalRfidInput) return;
+
+    const rfidErr = getRfidValidationError(modalRfidInput.trim());
+    if (rfidErr) {
+      setModalRfidError(rfidErr);
+      return;
+    }
+
+    setModalRfidError(null);
     setModalPairing(true);
     setModalSuccessMsg('');
 
     try {
-      await pairDriverRfidCard(rfidModalDriver.uid, modalRfidInput);
+      await pairDriverRfidCard(rfidModalDriver.uid, modalRfidInput.trim().toUpperCase());
       setModalSuccessMsg(`RFID Card [${modalRfidInput.toUpperCase()}] linked to ${rfidModalDriver.fullName}!`);
       setTimeout(() => {
         setRfidModalDriver(null);
         setModalSuccessMsg('');
+        setModalRfidError(null);
       }, 1400);
     } catch (err) {
       console.error('Error pairing RFID card:', err);
+      setModalRfidError('Failed to link RFID card. Please retry.');
     } finally {
       setModalPairing(false);
     }
@@ -2424,13 +2495,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#0D47A1]">Contact Phone</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#0D47A1]">Contact Phone</label>
+                    {profilePhone.trim().length > 0 && !getPhoneValidationError(profilePhone.trim()) && (
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Valid phone
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="tel"
+                    placeholder="0917 123 4567 or +63 917 123 4567"
                     value={profilePhone}
-                    onChange={(e) => setProfilePhone(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none focus:border-[#1565C0]"
+                    onChange={(e) => setProfilePhone(formatPhoneNumber(e.target.value))}
+                    className={`w-full bg-[#F8FAFC] border-2 rounded-xl p-2.5 text-xs font-bold focus:bg-white focus:outline-none transition-colors ${
+                      profilePhone.trim().length > 0 && getPhoneValidationError(profilePhone.trim())
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                        : profilePhone.trim().length > 0
+                        ? 'border-emerald-500 text-[#0D47A1]'
+                        : 'border-[#0D47A1] text-[#0D47A1]'
+                    }`}
                   />
+                  {profilePhone.trim().length > 0 && getPhoneValidationError(profilePhone.trim()) && (
+                    <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{getPhoneValidationError(profilePhone.trim())}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -2808,14 +2899,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Click to Enlarge License Card</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setLicensePreviewUrl(selectedDriverModal.driverLicenseCardUrl || null)}
-                    className="w-full py-1.5 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 text-[#0D47A1] border border-[#0D47A1] rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>View Full Resolution License Card</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setLicensePreviewUrl(selectedDriverModal.driverLicenseCardUrl || null)}
+                      className="py-1.5 px-2 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 text-[#0D47A1] border border-[#0D47A1] rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Full Card</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={adminOcrScanning}
+                      onClick={async () => {
+                        if (!selectedDriverModal.driverLicenseCardUrl) return;
+                        setAdminOcrScanning(true);
+                        setAdminOcrProgress(10);
+                        setAdminOcrResult(null);
+                        try {
+                          const res = await verifyDriverLicenseImage(
+                            selectedDriverModal.driverLicenseCardUrl,
+                            (_status, progress) => setAdminOcrProgress(progress)
+                          );
+                          setAdminOcrResult(res);
+                        } catch (err) {
+                          console.error('OCR Pre-check failed:', err);
+                        } finally {
+                          setAdminOcrScanning(false);
+                        }
+                      }}
+                      className="py-1.5 px-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-1 shadow-sm transition-colors disabled:opacity-50"
+                    >
+                      {adminOcrScanning ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                          <span>Scanning ({adminOcrProgress}%)</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Run OCR Pre-Check</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {adminOcrResult && (
+                    <div
+                      className={`p-2.5 rounded-xl border text-xs space-y-1.5 animate-in fade-in ${
+                        adminOcrResult.isOfficialLTO
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                          : 'bg-amber-50 border-amber-300 text-amber-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold">
+                        <div className="flex items-center gap-1">
+                          {adminOcrResult.isOfficialLTO ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          )}
+                          <span>
+                            {adminOcrResult.isOfficialLTO
+                              ? 'Official LTO License Confirmed'
+                              : 'Manual Review Recommended'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-extrabold bg-white/80 border border-current">
+                          {adminOcrResult.confidence}% Score
+                        </span>
+                      </div>
+
+                      {adminOcrResult.detectedLicenseNumber && (
+                        <div className="flex items-center justify-between bg-white/80 p-1.5 rounded-lg border border-slate-200 text-[11px]">
+                          <span className="font-semibold text-slate-600">Card OCR Number:</span>
+                          <span className="font-mono font-black text-[#0D47A1]">
+                            {adminOcrResult.detectedLicenseNumber}
+                          </span>
+                          {selectedDriverModal.driverLicenseNumber !== adminOcrResult.detectedLicenseNumber && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!adminOcrResult.detectedLicenseNumber) return;
+                                await updateDoc(doc(db, 'drivers', selectedDriverModal.uid), {
+                                  driverLicenseNumber: adminOcrResult.detectedLicenseNumber,
+                                });
+                                setSelectedDriverModal({
+                                  ...selectedDriverModal,
+                                  driverLicenseNumber: adminOcrResult.detectedLicenseNumber,
+                                });
+                              }}
+                              className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold uppercase hover:bg-emerald-700"
+                            >
+                              Sync Number
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="text-[10px] text-slate-600 flex flex-wrap gap-1 items-center">
+                        <span className="font-semibold">Security Markers:</span>
+                        {adminOcrResult.matchedKeywords.length > 0 ? (
+                          adminOcrResult.matchedKeywords.map((kw) => (
+                            <span
+                              key={kw}
+                              className="bg-white/90 text-slate-700 px-1 py-0.5 rounded border border-slate-200 text-[9px] font-bold"
+                            >
+                              ✓ {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="italic text-slate-400">None detected</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium text-center space-y-1">
@@ -3015,17 +3214,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <form onSubmit={handleSaveRfidInModal} className="space-y-3">
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500">
-                  Enter or Scan RFID Card Number
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase font-bold text-slate-500">
+                    Enter or Scan RFID Card Number
+                  </label>
+                  {modalRfidInput.trim().length > 0 && !getRfidValidationError(modalRfidInput.trim()) && (
+                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> Valid RFID UID
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   placeholder="e.g., 47-10-CC-14 or A3-4F-89-12"
                   value={modalRfidInput}
-                  onChange={(e) => setModalRfidInput(e.target.value)}
-                  className="w-full mt-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-3 text-sm text-[#0D47A1] font-mono font-bold uppercase focus:outline-none focus:border-[#1565C0] focus:bg-white placeholder:text-slate-400"
+                  onChange={(e) => {
+                    setModalRfidInput(formatRfidUid(e.target.value));
+                    setModalRfidError(null);
+                  }}
+                  className={`w-full mt-1 bg-[#F8FAFC] border-2 rounded-xl p-3 text-sm font-mono font-bold uppercase focus:outline-none placeholder:text-slate-400 transition-colors ${
+                    (modalRfidError || (modalRfidInput.trim().length > 0 && getRfidValidationError(modalRfidInput.trim())))
+                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30 text-rose-900'
+                      : modalRfidInput.trim().length > 0
+                      ? 'border-emerald-500 text-[#0D47A1]'
+                      : 'border-[#0D47A1] text-[#0D47A1]'
+                  }`}
                 />
+                {(modalRfidError || (modalRfidInput.trim().length > 0 && getRfidValidationError(modalRfidInput.trim()))) && (
+                  <p className="text-[10px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    <span>{modalRfidError || getRfidValidationError(modalRfidInput.trim())}</span>
+                  </p>
+                )}
               </div>
 
               {/* Quick Fill Demo Tags */}
@@ -3444,17 +3665,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <form onSubmit={handleCreateAccountSubmit} className="space-y-3 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">
-                    Full Name <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">
+                      Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    {createFullName.trim().length > 0 && !getFullNameValidationError(createFullName.trim()) && (
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Valid name
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
                     placeholder="e.g., Juan Dela Cruz"
                     value={createFullName}
-                    onChange={(e) => setCreateFullName(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none"
+                    onChange={(e) => setCreateFullName(formatFullName(e.target.value))}
+                    className={`w-full bg-[#F8FAFC] border rounded-xl p-2.5 text-xs font-bold focus:bg-white focus:outline-none transition-colors ${
+                      createFullName.trim().length > 0 && getFullNameValidationError(createFullName.trim())
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                        : createFullName.trim().length > 0
+                        ? 'border-emerald-500 text-[#0D47A1]'
+                        : 'border-[#0D47A1] text-[#0D47A1]'
+                    }`}
                   />
+                  {createFullName.trim().length > 0 && getFullNameValidationError(createFullName.trim()) && (
+                    <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{getFullNameValidationError(createFullName.trim())}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -3491,14 +3731,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">
+                      Phone Number {createPhone.trim().length > 0 && !getPhoneValidationError(createPhone.trim()) && (
+                        <span className="text-emerald-600 font-bold ml-1">• Valid phone</span>
+                      )}
+                    </label>
+                  </div>
                   <input
-                    type="text"
-                    placeholder="+63 900 000 0000"
+                    type="tel"
+                    placeholder="0917 123 4567 or +63 917 123 4567"
                     value={createPhone}
-                    onChange={(e) => setCreatePhone(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none"
+                    onChange={(e) => setCreatePhone(formatPhoneNumber(e.target.value))}
+                    className={`w-full bg-[#F8FAFC] border rounded-xl p-2.5 text-xs font-bold focus:bg-white focus:outline-none transition-colors ${
+                      createPhone.trim().length > 0 && getPhoneValidationError(createPhone.trim())
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                        : createPhone.trim().length > 0
+                        ? 'border-emerald-500 text-[#0D47A1]'
+                        : 'border-[#0D47A1] text-[#0D47A1]'
+                    }`}
                   />
+                  {createPhone.trim().length > 0 && getPhoneValidationError(createPhone.trim()) && (
+                    <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{getPhoneValidationError(createPhone.trim())}</span>
+                    </p>
+                  )}
                 </div>
 
                 {createRole === 'driver' && (
@@ -3531,25 +3789,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Driver License Number</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          Driver License No. <span className="text-rose-500">*</span>
+                        </label>
+                        {createLicenseNumber.trim().length > 0 && !getDriverLicenseValidationError(createLicenseNumber.trim()) && (
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Valid LTO
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
-                        placeholder="e.g., DL-987654"
+                        required
+                        placeholder="LTO Format: N01-23-456789"
+                        maxLength={13}
                         value={createLicenseNumber}
-                        onChange={(e) => setCreateLicenseNumber(e.target.value)}
-                        className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none"
+                        onChange={(e) => setCreateLicenseNumber(formatDriverLicense(e.target.value))}
+                        className={`w-full bg-[#F8FAFC] border rounded-xl p-2.5 text-xs font-mono font-bold focus:bg-white focus:outline-none transition-colors ${
+                          createLicenseNumber.trim().length > 0 && getDriverLicenseValidationError(createLicenseNumber.trim())
+                            ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                            : createLicenseNumber.trim().length > 0
+                            ? 'border-emerald-500 text-[#0D47A1]'
+                            : 'border-[#0D47A1] text-[#0D47A1]'
+                        }`}
                       />
+                      {createLicenseNumber.trim().length > 0 && getDriverLicenseValidationError(createLicenseNumber.trim()) && (
+                        <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>{getDriverLicenseValidationError(createLicenseNumber.trim())}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-1 sm:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Pair RFID Card UID (Optional)</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Pair RFID Card UID (Optional)</label>
+                        {createRfidUid.trim().length > 0 && !getRfidValidationError(createRfidUid.trim()) && (
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Valid RFID UID
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
-                        placeholder="e.g., 5A4C32FF (leave blank to link later)"
+                        placeholder="e.g., 5A4C32FF or 47-10-CC-14 (leave blank to link later)"
                         value={createRfidUid}
-                        onChange={(e) => setCreateRfidUid(e.target.value)}
-                        className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono font-bold focus:bg-white focus:outline-none uppercase"
+                        onChange={(e) => setCreateRfidUid(formatRfidUid(e.target.value))}
+                        className={`w-full bg-[#F8FAFC] border rounded-xl p-2.5 text-xs font-mono font-bold focus:bg-white focus:outline-none uppercase transition-colors ${
+                          createRfidUid.trim().length > 0 && getRfidValidationError(createRfidUid.trim())
+                            ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                            : createRfidUid.trim().length > 0
+                            ? 'border-emerald-500 text-[#0D47A1]'
+                            : 'border-[#0D47A1] text-[#0D47A1]'
+                        }`}
                       />
+                      {createRfidUid.trim().length > 0 && getRfidValidationError(createRfidUid.trim()) && (
+                        <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>{getRfidValidationError(createRfidUid.trim())}</span>
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
