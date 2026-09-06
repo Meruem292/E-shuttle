@@ -25,6 +25,7 @@ import { UserProfile, DriverProfile, UserRole, AccountStatus, EBikeDevice } from
 import { subscribeToEBikes, autoResolveRfidAssignment } from '../services/ebikeService';
 import { sanitizeVehicleInfo } from '../utils/sanitizeVehicle';
 import { logActivity } from '../services/activityLogService';
+import { isValidEmail } from '../utils/validation';
 
 /**
  * Recursively strips keys with `undefined` values from an object.
@@ -528,6 +529,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const cleanEmail = email.trim().toLowerCase();
+      if (!isValidEmail(cleanEmail)) {
+        throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+      }
       let userUid: string;
 
       try {
@@ -606,6 +610,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const cleanEmail = email.trim().toLowerCase();
+      if (!isValidEmail(cleanEmail)) {
+        throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+      }
       let userUid: string;
 
       try {
@@ -685,7 +692,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+    }
+    await sendPasswordResetEmail(auth, cleanEmail);
   };
 
   const logout = async () => {

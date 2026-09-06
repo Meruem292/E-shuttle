@@ -26,6 +26,7 @@ import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../serv
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import { isValidEmail, getEmailValidationError } from '../../utils/validation';
 import { ChatDrawer } from '../Common/ChatDrawer';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import {
@@ -43,6 +44,7 @@ import {
   LogOut,
   HelpCircle,
   CheckCircle,
+  AlertCircle,
   XCircle,
   Ban,
   Save,
@@ -593,6 +595,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!createFullName.trim() || !createEmail.trim()) {
       setCreateError('Full name and email are required.');
+      return;
+    }
+
+    const emailFormatErr = getEmailValidationError(createEmail.trim());
+    if (emailFormatErr) {
+      setCreateError(emailFormatErr);
       return;
     }
 
@@ -3450,17 +3458,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">
-                    Email Address <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">
+                      Email Address <span className="text-rose-500">*</span>
+                    </label>
+                    {createEmail.trim().length > 0 && !getEmailValidationError(createEmail.trim()) && (
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Valid email
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="email"
                     required
                     placeholder="user@domain.com"
                     value={createEmail}
                     onChange={(e) => setCreateEmail(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none"
+                    className={`w-full bg-[#F8FAFC] border rounded-xl p-2.5 text-xs font-bold focus:bg-white focus:outline-none transition-colors ${
+                      createEmail.trim().length > 0 && getEmailValidationError(createEmail.trim())
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-800'
+                        : createEmail.trim().length > 0
+                        ? 'border-emerald-500 text-[#0D47A1]'
+                        : 'border-[#0D47A1] text-[#0D47A1]'
+                    }`}
                   />
+                  {createEmail.trim().length > 0 && getEmailValidationError(createEmail.trim()) && (
+                    <p className="text-[10px] text-rose-600 flex items-start gap-1 font-semibold leading-tight mt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{getEmailValidationError(createEmail.trim())}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">

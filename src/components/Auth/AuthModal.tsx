@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, HelpCircle, Info } from 'lucide-react';
+import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, HelpCircle, Info, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
+import { isValidEmail, getEmailValidationError } from '../../utils/validation';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
@@ -75,6 +76,13 @@ export const AuthModal: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
 
+  const isStrictEmailMode = mode === 'register' || mode === 'forgot';
+  const trimmedEmail = email.trim();
+  const shouldValidateEmailFormat = isStrictEmailMode || (trimmedEmail.length > 0 && trimmedEmail.includes('@'));
+  const emailValidationError =
+    trimmedEmail.length > 0 && shouldValidateEmailFormat ? getEmailValidationError(trimmedEmail) : null;
+  const isEmailFormatValid = trimmedEmail.length > 0 && shouldValidateEmailFormat && !emailValidationError;
+
   // Handle Driver's License Picture File Selection & Upload to Firebase Storage
   const handleLicenseCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -138,6 +146,22 @@ export const AuthModal: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+
+    // Strict email format validation
+    if (isStrictEmailMode) {
+      const emailErr = getEmailValidationError(trimmedEmail);
+      if (emailErr) {
+        setErrorMsg(emailErr);
+        return;
+      }
+    } else if (trimmedEmail.includes('@')) {
+      const emailErr = getEmailValidationError(trimmedEmail);
+      if (emailErr) {
+        setErrorMsg(`Invalid email format: ${emailErr}`);
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -436,17 +460,55 @@ export const AuthModal: React.FC = () => {
           )}
 
           <div>
-            <label className="text-[11px] font-bold text-[#0D47A1]">
-              {mode === 'admin_login' ? 'Admin Username or Email' : 'Email or Username'}
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-[#0D47A1]">
+                {mode === 'admin_login'
+                  ? 'Admin Username or Email'
+                  : mode === 'register'
+                  ? 'Email Address'
+                  : mode === 'forgot'
+                  ? 'Account Email Address'
+                  : 'Email or Username'}
+              </label>
+              {isEmailFormatValid && (
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Valid email
+                </span>
+              )}
+            </div>
             <input
-              type={mode === 'register' ? 'email' : 'text'}
+              type={mode === 'register' || mode === 'forgot' ? 'email' : 'text'}
               required
-              placeholder={mode === 'admin_login' ? 'admin or admin@eshuttle.com' : 'username or user@example.com'}
+              placeholder={
+                mode === 'admin_login'
+                  ? 'admin or admin@eshuttle.com'
+                  : mode === 'register'
+                  ? 'e.g., name@example.com'
+                  : mode === 'forgot'
+                  ? 'name@example.com'
+                  : 'username or user@example.com'
+              }
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full mt-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] placeholder-slate-400 focus:outline-none focus:border-[#1565C0] focus:bg-white transition-colors"
+              className={`w-full mt-1 bg-[#F8FAFC] border-2 rounded-xl p-2.5 text-xs placeholder-slate-400 focus:outline-none transition-colors ${
+                emailValidationError
+                  ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-900'
+                  : isEmailFormatValid
+                  ? 'border-emerald-500 focus:border-emerald-600 focus:bg-white text-[#0D47A1]'
+                  : 'border-[#0D47A1] focus:border-[#1565C0] focus:bg-white text-[#0D47A1]'
+              }`}
             />
+            {emailValidationError && (
+              <p className="text-[10px] text-rose-600 mt-1 flex items-start gap-1 font-semibold leading-tight">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>{emailValidationError}</span>
+              </p>
+            )}
+            {isStrictEmailMode && !email.trim() && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                Must be a valid email format with domain and extension (e.g., user@domain.com)
+              </p>
+            )}
           </div>
 
           {mode !== 'forgot' && (
