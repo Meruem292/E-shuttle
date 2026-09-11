@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 
 export const DriverRides: React.FC = () => {
   const { currentUser } = useAuth();
@@ -39,11 +40,17 @@ export const DriverRides: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-4 pb-36 max-w-md mx-auto space-y-4">
-      <div className="pt-2">
-        <h2 className="text-xl font-black text-[#0D47A1]">
-          <span>Pick-up & Drop-off History</span>
-        </h2>
-        <p className="text-xs text-slate-500 font-medium">Completed user transit and distance log</p>
+      <div className="flex items-center justify-between pt-2">
+        <div>
+          <h2 className="text-xl font-black text-[#0D47A1]">
+            <span>Pick-up & Drop-off History</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium">Completed user transit and distance log</p>
+        </div>
+        <NotificationBellButton
+          className="bg-white border-2 border-[#0D47A1] text-[#0D47A1] shadow-md hover:bg-[#E3F2FD] p-2"
+          iconClassName="w-4 h-4 text-[#0D47A1]"
+        />
       </div>
 
       {/* Summary Stat Card */}

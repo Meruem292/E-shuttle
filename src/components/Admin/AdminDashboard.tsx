@@ -45,6 +45,7 @@ import {
 import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
 import { ChatDrawer } from '../Common/ChatDrawer';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 import {
   IncidentTicket,
   subscribeToTickets,
@@ -99,6 +100,7 @@ import {
   Sparkles,
   GraduationCap,
   Plus,
+  ClipboardList,
 } from 'lucide-react';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
@@ -1332,6 +1334,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="hidden sm:inline">Info & FAQs</span>
           </button>
 
+          <NotificationBellButton
+            className="p-2 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors active:scale-95 shadow-sm shrink-0"
+            iconClassName="w-4 h-4 text-[#0D47A1]"
+          />
+
           <button
             onClick={logout}
             className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
@@ -1342,6 +1349,88 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* OPERATIONS SUB-NAV PILLS */}
+      {['ebikes', 'stations', 'zones', 'rides'].includes(currentTab) && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <button
+            onClick={() => setActiveTab('ebikes')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'ebikes'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Cpu className="w-4 h-4" />
+            <span>E-Shuttle Fleet</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('stations')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'stations'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Landmark className="w-4 h-4" />
+            <span>Stations</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('zones')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'zones'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Service Zones</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('rides')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'rides'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Route className="w-4 h-4" />
+            <span>Trip History</span>
+          </button>
+        </div>
+      )}
+
+      {/* SETTINGS & AUDIT LOGS SUB-NAV PILLS */}
+      {['settings', 'logs', 'audit'].includes(currentTab) && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'settings'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Dispatch Settings</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'logs' || currentTab === 'audit'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span>Audit & Activity Logs</span>
+          </button>
+        </div>
+      )}
 
 
 

@@ -3,6 +3,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 
 export const CustomerRideHistory: React.FC = () => {
   const { currentUser } = useAuth();
@@ -50,6 +51,10 @@ export const CustomerRideHistory: React.FC = () => {
           </h2>
           <p className="text-xs text-slate-500 font-medium">Past E-Shuttle trips and transit logs</p>
         </div>
+        <NotificationBellButton
+          className="bg-white border-2 border-[#0D47A1] text-[#0D47A1] shadow-md hover:bg-[#E3F2FD] p-2"
+          iconClassName="w-4 h-4 text-[#0D47A1]"
+        />
       </div>
 
       {loading ? (

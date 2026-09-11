@@ -4,6 +4,7 @@ import { LogOut, HelpCircle, Info, ChevronRight, Bus, BookOpen } from 'lucide-re
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
@@ -27,15 +28,21 @@ export const CustomerProfile: React.FC = () => {
           </h2>
           <p className="text-xs text-slate-500 font-medium">Manage your profile and app preferences</p>
         </div>
-        <img
-          src={appLogo}
-          onError={(e) => {
-            markLogoUrlAsFailed(appLogo);
-            (e.target as HTMLImageElement).src = officialLogoFallback;
-          }}
-          alt="E-Shuttle Official Logo"
-          className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md"
-        />
+        <div className="flex items-center gap-2">
+          <NotificationBellButton
+            className="bg-white border-2 border-[#0D47A1] text-[#0D47A1] shadow-md hover:bg-[#E3F2FD] p-2"
+            iconClassName="w-4 h-4 text-[#0D47A1]"
+          />
+          <img
+            src={appLogo}
+            onError={(e) => {
+              markLogoUrlAsFailed(appLogo);
+              (e.target as HTMLImageElement).src = officialLogoFallback;
+            }}
+            alt="E-Shuttle Official Logo"
+            className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md"
+          />
+        </div>
       </div>
 
       {/* Profile Card */}

@@ -334,9 +334,10 @@ export async function updateShuttleStation(
 /**
  * Delete a designated shuttle station
  */
-export async function deleteShuttleStation(id: string): Promise<void> {
+export async function deleteShuttleStation(id: string, nameHint?: string): Promise<void> {
   const localList = getLocalStations();
   const existing = localList.find((st) => st.id === id);
+  const stationName = nameHint || existing?.name || id;
 
   try {
     const stationRef = doc(db, STATIONS_COLLECTION, id);
@@ -351,19 +352,19 @@ export async function deleteShuttleStation(id: string): Promise<void> {
   notifyLocalSubscribers();
 
   // Audit log deletion
-  logActivity({
+  await logActivity({
     action: 'DELETE',
     actionLabel: 'Deleted Station Pin',
     entityType: 'STATION',
     entityId: id,
-    entityName: existing?.name || id,
-    summary: `Deleted shuttle station pin "${existing?.name || id}"`,
+    entityName: stationName,
+    summary: `Deleted shuttle station pin "${stationName}"`,
     details: {
-      summary: `Station deleted from system`,
+      summary: `Station deleted from system by administrator`,
       before: existing ? { ...existing } : null,
     },
     severity: 'danger',
-  }).catch(() => {});
+  });
 }
 
 /**

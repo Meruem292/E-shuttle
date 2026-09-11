@@ -411,7 +411,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Instantly synchronize user profile and set appropriate role
       const synced = await syncUserProfile(res.user);
       if (synced) {
-        if (synced.role === 'driver') {
+        if (synced.role === 'admin') {
+          await firebaseSignOut(auth);
+          setUserProfile(null);
+          setDriverProfile(null);
+          setRole(null);
+          throw new Error('Access Denied: Administrator accounts must sign in using the Administrator Portal.');
+        } else if (synced.role === 'driver') {
           setDriverProfile(synced.profile as DriverProfile);
           setUserProfile(null);
           setRole('driver');

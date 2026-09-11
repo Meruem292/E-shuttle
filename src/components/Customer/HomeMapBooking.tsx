@@ -39,6 +39,19 @@ import {
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import {
+  playPickupChime,
+  triggerHapticVibrate,
+  sendNativePickupNotification,
+  speakPickupAnnouncement,
+  requestNotificationPermission,
+  addAppNotification,
+} from '../../services/notificationService';
+import {
+  PickupNotificationBanner,
+  PickupNotificationData,
+} from '../Common/PickupNotificationBanner';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
@@ -51,6 +64,11 @@ export const HomeMapBooking: React.FC = () => {
   const [detectedUserZone, setDetectedUserZone] = useState<OperationalZone | null>(null);
   const [stations, setStations] = useState<ShuttleStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState<boolean>(true);
+
+  // In-app pickup notification state
+  const [pickupNotification, setPickupNotification] = useState<PickupNotificationData | null>(null);
+  const lastBookingStatusRef = React.useRef<string | null>(null);
+  const alerted300mBookingIdRef = React.useRef<string | null>(null);
 
   // Location state (Default to first station once loaded)
   const [pickup, setPickup] = useState<LocationPoint>({
@@ -361,10 +379,123 @@ export const HomeMapBooking: React.FC = () => {
 
     const unsub = listenToCustomerActiveBooking(currentUser.uid, (booking) => {
       if (booking) {
+        const prevStatus = lastBookingStatusRef.current;
+        lastBookingStatusRef.current = booking.status;
+
+        // Trigger pickup notification when driver accepts, approaches, or arrives
+        if (prevStatus && prevStatus !== booking.status) {
+          if (booking.status === 'DRIVER_ASSIGNED') {
+            playPickupChime('driver_assigned');
+            triggerHapticVibrate([150, 80, 150]);
+            speakPickupAnnouncement(`E-Shuttle ride confirmed. Driver ${booking.driverName || ''} is on the way to ${booking.pickup.address}.`);
+            sendNativePickupNotification('E-Shuttle Assigned!', {
+              body: `Driver ${booking.driverName || 'E-Shuttle'} is heading to your pickup at ${booking.pickup.address}`,
+            });
+            addAppNotification({
+              title: 'Shuttle Assigned & On The Way',
+              message: `Driver ${booking.driverName || 'E-Shuttle'} is heading to your pickup at ${booking.pickup.address}`,
+              type: 'pickup',
+              meta: { bookingId: booking.id, driverName: booking.driverName },
+            }, currentUser?.uid);
+            setPickupNotification({
+              id: String(Date.now()),
+              type: 'driver_assigned',
+              title: 'Shuttle Assigned & On The Way!',
+              message: `Driver ${booking.driverName || 'E-Shuttle'} accepted your ride to ${booking.destination.address}.`,
+              driverName: booking.driverName || undefined,
+              driverPhone: booking.driverPhone || undefined,
+            });
+          } else if (booking.status === 'DRIVER_ARRIVING') {
+            playPickupChime('driver_approaching');
+            triggerHapticVibrate([150, 100, 150]);
+            speakPickupAnnouncement(`Your shuttle is approaching your pickup at ${booking.pickup.address}.`);
+            sendNativePickupNotification('E-Shuttle Arriving Soon!', {
+              body: `Your shuttle is approaching your pickup at ${booking.pickup.address}`,
+            });
+            addAppNotification({
+              title: 'Shuttle Arriving in ~2 Minutes',
+              message: `Please head to the pickup point at ${booking.pickup.address}`,
+              type: 'pickup',
+              meta: { bookingId: booking.id },
+            }, currentUser?.uid);
+            setPickupNotification({
+              id: String(Date.now()),
+              type: 'driver_approaching',
+              title: 'Shuttle Arriving in ~2 Minutes!',
+              message: `Please head to the pickup point at ${booking.pickup.address}.`,
+              driverName: booking.driverName || undefined,
+              driverPhone: booking.driverPhone || undefined,
+            });
+          } else if (booking.status === 'DRIVER_ARRIVED') {
+            playPickupChime('driver_arrived');
+            triggerHapticVibrate([250, 100, 250, 100, 250]);
+            speakPickupAnnouncement(`Your E-Shuttle has arrived at ${booking.pickup.address}. Please proceed to board.`);
+            sendNativePickupNotification('Your E-Shuttle Has Arrived!', {
+              body: `Your driver is waiting at ${booking.pickup.address}. Please proceed to board.`,
+            });
+            addAppNotification({
+              title: 'Your E-Shuttle Has Arrived!',
+              message: `Driver is waiting at ${booking.pickup.address}. Vehicle: ${sanitizeVehicleInfo(booking.driverVehicleInfo)}.`,
+              type: 'pickup',
+              meta: { bookingId: booking.id },
+            }, currentUser?.uid);
+            setPickupNotification({
+              id: String(Date.now()),
+              type: 'driver_arrived',
+              title: 'Your E-Shuttle Has Arrived!',
+              message: `Driver is waiting at ${booking.pickup.address}. Look for vehicle info: ${sanitizeVehicleInfo(booking.driverVehicleInfo)}.`,
+              driverName: booking.driverName || undefined,
+              driverPhone: booking.driverPhone || undefined,
+            });
+          }
+        }
+
+        // 300-METER PROXIMITY TRIGGER: Proximity alert when driver approaches within 300m
+        if (
+          (booking.status === 'DRIVER_ASSIGNED' || booking.status === 'DRIVER_ARRIVING') &&
+          booking.driverLocation?.latitude &&
+          booking.driverLocation?.longitude &&
+          booking.pickup?.latitude &&
+          booking.pickup?.longitude
+        ) {
+          const distToPickupMeters = calculateDistanceMeters(
+            booking.driverLocation.latitude,
+            booking.driverLocation.longitude,
+            booking.pickup.latitude,
+            booking.pickup.longitude
+          );
+
+          if (distToPickupMeters <= 300 && alerted300mBookingIdRef.current !== booking.id) {
+            alerted300mBookingIdRef.current = booking.id;
+            playPickupChime('driver_approaching');
+            triggerHapticVibrate([200, 100, 200]);
+            speakPickupAnnouncement(`Your E-Shuttle is within 300 meters. Please prepare to board at ${booking.pickup.address}.`);
+            sendNativePickupNotification('E-Shuttle is 300m Away!', {
+              body: `Driver ${booking.driverName || 'E-Shuttle'} is approximately ${Math.round(distToPickupMeters)}m from your pickup at ${booking.pickup.address}.`,
+            });
+            addAppNotification({
+              title: `Shuttle Nearby (~${Math.round(distToPickupMeters)}m)!`,
+              message: `Driver ${booking.driverName || 'E-Shuttle'} is within 300m of ${booking.pickup.address}. Please proceed to the boarding area.`,
+              type: 'proximity',
+              meta: { bookingId: booking.id, distance: Math.round(distToPickupMeters) },
+            }, currentUser?.uid);
+            setPickupNotification({
+              id: String(Date.now()),
+              type: 'driver_approaching',
+              title: `Shuttle Nearby (~${Math.round(distToPickupMeters)}m)!`,
+              message: `Driver ${booking.driverName || 'E-Shuttle'} is within 300m of ${booking.pickup.address}. Please proceed to the boarding area.`,
+              driverName: booking.driverName || undefined,
+              driverPhone: booking.driverPhone || undefined,
+            });
+          }
+        }
+
         setActiveBooking(booking);
         setPickup(booking.pickup);
         setDestination(booking.destination);
       } else {
+        lastBookingStatusRef.current = null;
+        alerted300mBookingIdRef.current = null;
         if (activeBooking && activeBooking.status === 'RIDE_STARTED') {
           setCompletedBookingToRate(activeBooking);
           setShowRatingModal(true);
@@ -663,6 +794,12 @@ export const HomeMapBooking: React.FC = () => {
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#E3F2FD] overflow-hidden select-none">
+      {/* Real-time In-App Pickup Notification Banner */}
+      <PickupNotificationBanner
+        notification={pickupNotification}
+        onDismiss={() => setPickupNotification(null)}
+      />
+
       {/* Map Header Overlay */}
       <div className="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
         <div className="flex items-center justify-between pointer-events-auto max-w-md mx-auto">
@@ -682,13 +819,22 @@ export const HomeMapBooking: React.FC = () => {
             </div>
           </div>
 
-          {/* Online Drivers & Stations Badge */}
-          <div
-            title="E-Shuttles currently active in service"
-            className="flex items-center gap-1.5 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3.5 py-1.5 rounded-full text-[#0D47A1] text-xs font-bold shadow-lg"
-          >
-            <span className="w-2 h-2 bg-[#0D47A1] rounded-full animate-ping"></span>
-            <span>{displayOnlineDrivers.length} Shuttles Active</span>
+          <div className="flex items-center gap-2">
+            {/* Online Drivers & Stations Badge */}
+            <div
+              title="E-Shuttles currently active in service"
+              className="flex items-center gap-1.5 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3 py-1.5 rounded-full text-[#0D47A1] text-xs font-bold shadow-lg"
+            >
+              <span className="w-2 h-2 bg-[#0D47A1] rounded-full animate-ping"></span>
+              <span className="hidden sm:inline">{displayOnlineDrivers.length} Shuttles Active</span>
+              <span className="sm:hidden">{displayOnlineDrivers.length} Active</span>
+            </div>
+
+            {/* Notification Bell Button */}
+            <NotificationBellButton
+              className="bg-white/95 border-2 border-[#0D47A1] text-[#0D47A1] shadow-lg backdrop-blur-md hover:bg-slate-50 shrink-0"
+              iconClassName="w-4 h-4 text-[#0D47A1]"
+            />
           </div>
         </div>
       </div>

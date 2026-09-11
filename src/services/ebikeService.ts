@@ -103,26 +103,27 @@ export async function registerEBike(data: {
 /**
  * Delete an E-Bike device
  */
-export async function deleteEBike(deviceId: string): Promise<void> {
+export async function deleteEBike(deviceId: string, nameHint?: string): Promise<void> {
   const existingDoc = await getDoc(doc(db, 'ebikes', deviceId)).catch(() => null);
   const existingData = existingDoc?.exists() ? existingDoc.data() : null;
+  const ebikeName = nameHint || existingData?.name || deviceId;
 
   await deleteDoc(doc(db, 'ebikes', deviceId));
 
   // Audit log deletion
-  logActivity({
+  await logActivity({
     action: 'DELETE',
     actionLabel: 'Decommissioned E-Shuttle',
     entityType: 'SHUTTLE',
     entityId: deviceId,
-    entityName: existingData?.name || deviceId,
-    summary: `Decommissioned and deleted e-shuttle device "${existingData?.name || deviceId}" from fleet`,
+    entityName: ebikeName,
+    summary: `Decommissioned and deleted e-shuttle device "${ebikeName}" from fleet`,
     details: {
       summary: `Device removed from active fleet inventory`,
       before: existingData,
     },
     severity: 'danger',
-  }).catch(() => {});
+  });
 }
 
 /**

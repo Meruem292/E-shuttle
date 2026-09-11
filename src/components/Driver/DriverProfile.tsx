@@ -6,6 +6,7 @@ import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
@@ -82,15 +83,21 @@ export const DriverProfile: React.FC = () => {
           </h2>
           <p className="text-xs text-slate-500 font-medium">RFID credentials, active E-Shuttle pairing, and driver status</p>
         </div>
-        <img
-          src={appLogo}
-          onError={(e) => {
-            markLogoUrlAsFailed(appLogo);
-            (e.target as HTMLImageElement).src = officialLogoFallback;
-          }}
-          alt="E-Shuttle Official Logo"
-          className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
-        />
+        <div className="flex items-center gap-2">
+          <NotificationBellButton
+            className="bg-white border-2 border-[#0D47A1] text-[#0D47A1] shadow-md hover:bg-[#E3F2FD] p-2"
+            iconClassName="w-4 h-4 text-[#0D47A1]"
+          />
+          <img
+            src={appLogo}
+            onError={(e) => {
+              markLogoUrlAsFailed(appLogo);
+              (e.target as HTMLImageElement).src = officialLogoFallback;
+            }}
+            alt="E-Shuttle Official Logo"
+            className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
+          />
+        </div>
       </div>
 
       {driverProfile?.disconnectNotice && (

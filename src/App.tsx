@@ -12,6 +12,7 @@ import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
 import { ChatDrawer } from './components/Common/ChatDrawer';
+import { NotificationModal } from './components/Common/NotificationModal';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
@@ -19,7 +20,15 @@ const MainAppContent: React.FC = () => {
   const { logoUrl } = useAppLogo();
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
   const tabHistoryRef = useRef<string[]>(['home']);
+
+  // Global listener to trigger notification modal from any bell button or service dispatch
+  useEffect(() => {
+    const handleOpenModal = () => setIsNotificationOpen(true);
+    window.addEventListener('eshuttle_open_notifications', handleOpenModal);
+    return () => window.removeEventListener('eshuttle_open_notifications', handleOpenModal);
+  }, []);
 
   // Track tab history for back button navigation
   const handleTabChange = (newTab: string) => {
@@ -54,7 +63,7 @@ const MainAppContent: React.FC = () => {
   // Ensure default active tab matches role upon page refresh or role change
   useEffect(() => {
     if (role === 'admin') {
-      const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'];
+      const validAdminTabs = ['dashboard', 'map', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings', 'logs', 'audit'];
       if (!validAdminTabs.includes(activeTab)) {
         setActiveTab('dashboard');
         tabHistoryRef.current = ['dashboard'];
@@ -105,7 +114,7 @@ const MainAppContent: React.FC = () => {
   // Fallback tab computation to guarantee no blank screen is rendered before/during state updates
   const customerTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
   const driverTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
-  const adminTab = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'].includes(activeTab) ? activeTab : 'dashboard';
+  const adminTab = ['dashboard', 'map', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings', 'logs', 'audit'].includes(activeTab) ? activeTab : 'dashboard';
 
   return (
     <div className="h-full w-full bg-[#E3F2FD] flex flex-col overflow-hidden select-none">
@@ -141,12 +150,19 @@ const MainAppContent: React.FC = () => {
         onClose={() => setIsChatOpen(false)}
       />
 
+      {/* Global Notification Center Modal */}
+      <NotificationModal
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+      />
+
       {/* Bottom Navigation */}
       <BottomNav
         activeTab={role === 'admin' ? adminTab : role === 'customer' ? customerTab : driverTab}
         setActiveTab={handleTabChange}
         role={role}
         onOpenChat={() => setIsChatOpen(true)}
+        onOpenNotifications={() => setIsNotificationOpen(true)}
       />
     </div>
   );

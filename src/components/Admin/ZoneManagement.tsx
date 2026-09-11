@@ -359,7 +359,7 @@ export const ZoneManagement: React.FC = () => {
     if (!zoneToDelete) return;
     setIsDeleting(true);
     try {
-      await deleteOperationalZone(zoneToDelete.id);
+      await deleteOperationalZone(zoneToDelete.id, zoneToDelete.name);
       setNotification(`Zone "${zoneToDelete.name}" deleted.`);
       if (selectedZone?.id === zoneToDelete.id) setSelectedZone(null);
       setZoneToDelete(null);

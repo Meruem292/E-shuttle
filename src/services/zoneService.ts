@@ -19,16 +19,58 @@ import { logActivity } from './activityLogService';
 
 export const ZONES_COLLECTION = 'operational_zones';
 const LOCAL_STORAGE_ZONES_KEY = 'eshuttle_operational_zones_cache';
+const LOCAL_DELETED_ZONES_KEY = 'eshuttle_deleted_zone_ids';
+
+export const DEFAULT_INITIAL_ZONES: Omit<OperationalZone, 'id'>[] = [
+  {
+    name: 'Tagaytay City Hall & Government Center',
+    code: 'tagaytay-city-hall',
+    description: 'Primary administrative hub and central shuttle terminal boundary',
+    centerLatitude: 14.1153,
+    centerLongitude: 120.9621,
+    radiusMeters: 1500,
+    isActive: true,
+  },
+  {
+    name: 'Tagaytay City National High School Campus',
+    code: 'tagaytay-high-school',
+    description: 'Educational district and student transit geofence',
+    centerLatitude: 14.1180,
+    centerLongitude: 120.9670,
+    radiusMeters: 1200,
+    isActive: true,
+  },
+];
+
+function getDeletedZoneIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LOCAL_DELETED_ZONES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+function markZoneAsDeleted(id: string) {
+  try {
+    const current = getDeletedZoneIds();
+    current.add(id);
+    localStorage.setItem(LOCAL_DELETED_ZONES_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
 
 function getLocalZones(): OperationalZone[] {
   try {
+    const deleted = getDeletedZoneIds();
     const raw = localStorage.getItem(LOCAL_STORAGE_ZONES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const uniqueMap = new Map<string, OperationalZone>();
         for (const z of parsed) {
-          if (z && z.id) uniqueMap.set(z.id, z);
+          if (z && z.id && !deleted.has(z.id)) uniqueMap.set(z.id, z);
         }
         return Array.from(uniqueMap.values());
       }
@@ -41,15 +83,38 @@ function getLocalZones(): OperationalZone[] {
 
 function saveLocalZones(zones: OperationalZone[]) {
   try {
+    const deleted = getDeletedZoneIds();
     const uniqueMap = new Map<string, OperationalZone>();
     for (const z of zones) {
-      if (z && z.id) uniqueMap.set(z.id, z);
+      if (z && z.id && !deleted.has(z.id)) uniqueMap.set(z.id, z);
     }
     const deduplicated = Array.from(uniqueMap.values());
     localStorage.setItem(LOCAL_STORAGE_ZONES_KEY, JSON.stringify(deduplicated));
   } catch (e) {
     console.warn('Could not write local zones cache', e);
   }
+}
+
+function seedDefaultZonesIfEmptySync(): OperationalZone[] {
+  const now = new Date().toISOString();
+  const created = DEFAULT_INITIAL_ZONES.map((def, idx) => ({
+    id: `default-zone-${idx + 1}`,
+    ...def,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  saveLocalZones(created);
+
+  // Asynchronously push default zones to Firestore so they sync remotely
+  for (const z of created) {
+    addDoc(collection(db, ZONES_COLLECTION), {
+      ...z,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }).catch(() => {});
+  }
+
+  return created;
 }
 
 // In-memory subscribers for real-time fallback updates
@@ -66,8 +131,12 @@ function notifyLocalZoneSubscribers() {
 export function listenToOperationalZones(
   callback: (zones: OperationalZone[]) => void
 ): () => void {
-  // Return cached immediately
-  callback(getLocalZones());
+  // Provide initial zones immediately
+  let initial = getLocalZones();
+  if (initial.length === 0) {
+    initial = seedDefaultZonesIfEmptySync();
+  }
+  callback(initial);
   localZoneSubscribers.add(callback);
 
   let isUnsubscribed = false;
@@ -80,12 +149,28 @@ export function listenToOperationalZones(
       q,
       (snapshot) => {
         if (isUnsubscribed) return;
-        const zones: OperationalZone[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<OperationalZone, 'id'>),
-        }));
-        saveLocalZones(zones);
-        callback(zones);
+        const deletedIds = getDeletedZoneIds();
+        const remoteZones: OperationalZone[] = snapshot.docs
+          .map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<OperationalZone, 'id'>),
+          }))
+          .filter((z) => !deletedIds.has(z.id));
+
+        // Merge remote list with any local unsynced zones
+        const localList = getLocalZones().filter((z) => !deletedIds.has(z.id));
+        const remoteIds = new Set(remoteZones.map((z) => z.id));
+        const unsyncedLocal = localList.filter((z) => !remoteIds.has(z.id));
+
+        let merged = [...remoteZones, ...unsyncedLocal];
+
+        // Seed initial defaults if system has zero zones
+        if (merged.length === 0 && deletedIds.size === 0) {
+          merged = seedDefaultZonesIfEmptySync();
+        }
+
+        saveLocalZones(merged);
+        callback(merged);
       },
       (err) => {
         console.warn('Firestore zones listener fallback to local cache:', err.message);
@@ -225,9 +310,12 @@ export async function updateOperationalZone(
 /**
  * Delete an operational zone
  */
-export async function deleteOperationalZone(id: string): Promise<void> {
+export async function deleteOperationalZone(id: string, nameHint?: string): Promise<void> {
+  markZoneAsDeleted(id);
+
   const localList = getLocalZones();
   const existing = localList.find((z) => z.id === id);
+  const zoneName = nameHint || existing?.name || id;
 
   try {
     const zoneRef = doc(db, ZONES_COLLECTION, id);
@@ -241,19 +329,19 @@ export async function deleteOperationalZone(id: string): Promise<void> {
   notifyLocalZoneSubscribers();
 
   // Audit log deletion
-  logActivity({
+  await logActivity({
     action: 'DELETE',
     actionLabel: 'Deleted Service Zone',
     entityType: 'ZONE',
     entityId: id,
-    entityName: existing?.name || id,
-    summary: `Deleted geofence service zone "${existing?.name || id}"`,
+    entityName: zoneName,
+    summary: `Deleted geofence service zone "${zoneName}"`,
     details: {
-      summary: `Geofence zone deleted from system`,
+      summary: `Geofence zone deleted from system by administrator`,
       before: existing ? { ...existing } : null,
     },
     severity: 'danger',
-  }).catch(() => {});
+  });
 }
 
 import { ShuttleStation } from '../types';

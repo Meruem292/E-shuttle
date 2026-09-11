@@ -12,6 +12,7 @@ import {
   Bike,
   Info,
   X,
+  Users,
 } from 'lucide-react';
 import {
   listenToNearbySearchingBookings,
@@ -21,10 +22,23 @@ import {
   updateDriverLocation,
 } from '../../services/bookingService';
 import { updateEBikeGpsLocation } from '../../services/ebikeService';
+import { calculateDistanceMeters } from '../../services/stationService';
 import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import {
+  playPickupChime,
+  triggerHapticVibrate,
+  sendNativePickupNotification,
+  speakPickupAnnouncement,
+  addAppNotification,
+} from '../../services/notificationService';
+import {
+  PickupNotificationBanner,
+  PickupNotificationData,
+} from '../Common/PickupNotificationBanner';
+import { NotificationBellButton } from '../Common/NotificationBellButton';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser, logout } = useAuth();
@@ -39,6 +53,9 @@ export const DriverHome: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
   const [showInfoTooltip, setShowInfoTooltip] = useState<boolean>(false);
+  const [driverNotification, setDriverNotification] = useState<PickupNotificationData | null>(null);
+  const prevRequestCountRef = React.useRef<number>(0);
+  const driverAlerted300mRef = React.useRef<string | null>(null);
 
   // Sync driver profile state
   useEffect(() => {
@@ -93,6 +110,8 @@ export const DriverHome: React.FC = () => {
       setActiveRide(booking);
       if (booking) {
         setAvailability('BUSY');
+      } else {
+        driverAlerted300mRef.current = null;
       }
     });
     return () => unsub();
@@ -102,6 +121,7 @@ export const DriverHome: React.FC = () => {
   useEffect(() => {
     if (!driverProfile || driverProfile.accountStatus !== 'APPROVED' || availability !== 'ONLINE' || activeRide) {
       setNearbyRequests([]);
+      prevRequestCountRef.current = 0;
       return;
     }
 
@@ -109,6 +129,69 @@ export const DriverHome: React.FC = () => {
       driverProfile.currentLocation,
       5, // 5 km search radius
       (bookings) => {
+        // Multi-passenger pickup detection & alert
+        if (bookings.length > prevRequestCountRef.current && bookings.length > 0) {
+          const isMulti = bookings.length > 1;
+
+          // Group by station stops
+          const stationCounts: Record<string, number> = {};
+          bookings.forEach((b) => {
+            const stName = b.pickup.address.split('(')[0].trim();
+            stationCounts[stName] = (stationCounts[stName] || 0) + 1;
+          });
+          const stationBreakdown = Object.entries(stationCounts)
+            .map(([st, count]) => `${st} (${count} rider${count > 1 ? 's' : ''})`)
+            .join(' • ');
+
+          playPickupChime('new_request');
+          triggerHapticVibrate(isMulti ? [250, 100, 250, 100, 250] : [200, 100, 200]);
+
+          if (isMulti) {
+            speakPickupAnnouncement(`Multi-passenger pickup alert: ${bookings.length} commuters waiting across stations.`);
+            sendNativePickupNotification(`Multi-Passenger Pickup: ${bookings.length} Riders!`, {
+              body: `Waiting stops: ${stationBreakdown}`,
+            });
+            addAppNotification({
+              title: `Multi-Passenger Alert (${bookings.length} Riders)`,
+              message: `Waiting along route: ${stationBreakdown}`,
+              type: 'pickup',
+              meta: { count: bookings.length },
+            }, currentUser?.uid);
+            setDriverNotification({
+              id: String(Date.now()),
+              type: 'new_request',
+              title: `Multi-Passenger Alert (${bookings.length} Riders Waiting)`,
+              message: `Waiting along route: ${stationBreakdown}. E-Shuttle accommodates multiple passengers along the corridor.`,
+              actionLabel: 'Accept First Rider',
+              onAction: () => {
+                handleAcceptRide(bookings[0]);
+              },
+            });
+          } else {
+            const newest = bookings[0];
+            speakPickupAnnouncement(`New pickup request from ${newest.customerName} at ${newest.pickup.address.split('(')[0]}.`);
+            sendNativePickupNotification('New Pickup Request!', {
+              body: `${newest.customerName} requested a pickup at ${newest.pickup.address}`,
+            });
+            addAppNotification({
+              title: 'New Passenger Pickup Request',
+              message: `${newest.customerName} waiting at ${newest.pickup.address}`,
+              type: 'pickup',
+              meta: { bookingId: newest.id },
+            }, currentUser?.uid);
+            setDriverNotification({
+              id: String(Date.now()),
+              type: 'new_request',
+              title: 'New Passenger Pickup Request!',
+              message: `${newest.customerName} is waiting at ${newest.pickup.address} (${newest.distanceKm} km route).`,
+              actionLabel: 'Accept Ride',
+              onAction: () => {
+                handleAcceptRide(newest);
+              },
+            });
+          }
+        }
+        prevRequestCountRef.current = bookings.length;
         setNearbyRequests(bookings);
       },
       driverProfile.zoneId
@@ -137,6 +220,46 @@ export const DriverHome: React.FC = () => {
           }
         } catch (err) {
           console.error('Error updating driver live GPS:', err);
+        }
+      }
+
+      // 300-METER PROXIMITY TRIGGER FOR DRIVER: Alert driver when within 300m of passenger pickup
+      if (
+        activeRide?.status === 'DRIVER_ASSIGNED' &&
+        activeRide.pickup?.latitude &&
+        activeRide.pickup?.longitude
+      ) {
+        const distToPickupMeters = calculateDistanceMeters(
+          latitude,
+          longitude,
+          activeRide.pickup.latitude,
+          activeRide.pickup.longitude
+        );
+
+        if (distToPickupMeters <= 300 && driverAlerted300mRef.current !== activeRide.id) {
+          driverAlerted300mRef.current = activeRide.id;
+          playPickupChime('driver_approaching');
+          triggerHapticVibrate([200, 100, 200]);
+          speakPickupAnnouncement(`Approaching pickup point in 300 meters. Prepare to stop for ${activeRide.customerName}.`);
+          sendNativePickupNotification('Approaching Pickup (~300m)', {
+            body: `You are ~${Math.round(distToPickupMeters)}m from ${activeRide.pickup.address}. Prepare to stop for ${activeRide.customerName}.`,
+          });
+          addAppNotification({
+            title: `Approaching Pickup (~${Math.round(distToPickupMeters)}m)`,
+            message: `Prepare to stop for ${activeRide.customerName} at ${activeRide.pickup.address}`,
+            type: 'proximity',
+            meta: { bookingId: activeRide.id, distance: Math.round(distToPickupMeters) },
+          }, currentUser?.uid);
+          setDriverNotification({
+            id: String(Date.now()),
+            type: 'driver_approaching',
+            title: `Approaching Pickup (~${Math.round(distToPickupMeters)}m)!`,
+            message: `You are within 300m of ${activeRide.pickup.address}. Prepare to stop for ${activeRide.customerName}.`,
+            actionLabel: 'Mark Arrived',
+            onAction: () => {
+              handleDriverAction('DRIVER_ARRIVED');
+            },
+          });
         }
       }
     };
@@ -235,6 +358,12 @@ export const DriverHome: React.FC = () => {
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#E3F2FD] overflow-hidden select-none">
+      {/* Real-time Pickup Notification Banner for Driver */}
+      <PickupNotificationBanner
+        notification={driverNotification}
+        onDismiss={() => setDriverNotification(null)}
+      />
+
       {/* Top Driver Header Bar */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
         <div className="flex items-center justify-between gap-2 pointer-events-auto max-w-md mx-auto w-full">
@@ -278,6 +407,12 @@ export const DriverHome: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Notification Bell Button */}
+          <NotificationBellButton
+            className="bg-white/95 border-2 border-[#0D47A1] text-[#0D47A1] shadow-lg backdrop-blur-md hover:bg-slate-50 shrink-0"
+            iconClassName="w-4 h-4 text-[#0D47A1]"
+          />
 
           {/* ONLINE / OFFLINE TOGGLE BUTTON */}
           <button
@@ -480,7 +615,33 @@ export const DriverHome: React.FC = () => {
                   Nearby Pick-up Requests ({nearbyRequests.length})
                 </h3>
               </div>
+              {nearbyRequests.length > 1 && (
+                <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  Multi-Passenger
+                </span>
+              )}
             </div>
+
+            {/* Multi-Passenger Pickup Grouping Banner */}
+            {nearbyRequests.length > 1 && (
+              <div className="bg-[#E3F2FD] border-2 border-[#0D47A1] rounded-2xl p-3 flex items-start gap-2.5 text-[#0D47A1] shadow-sm">
+                <div className="w-7 h-7 rounded-xl bg-[#0D47A1] text-white flex items-center justify-center shrink-0 font-bold">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-[#0D47A1]">Multi-Passenger Pickups</span>
+                    <span className="text-[10px] font-bold bg-white text-[#0D47A1] px-2 py-0.5 rounded-full border border-[#0D47A1]/40">
+                      {nearbyRequests.length} Riders in Queue
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-700 font-medium mt-0.5">
+                    Shuttles can pick up multiple passengers waiting along the designated station stops.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {nearbyRequests.length === 0 ? (
               <div className="p-6 text-center text-slate-500 text-xs space-y-2">
