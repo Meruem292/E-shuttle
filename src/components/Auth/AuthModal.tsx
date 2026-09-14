@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Sparkles,
+  Key,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
@@ -20,6 +22,7 @@ import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../ser
 import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
+import { SECURITY_QUESTIONS } from '../../types';
 import {
   isValidEmail,
   getEmailValidationError,
@@ -39,7 +42,15 @@ import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
 export const AuthModal: React.FC = () => {
-  const { signIn, signInAdmin, signUpCustomer, signUpDriver, resetPassword } = useAuth();
+  const {
+    signIn,
+    signInAdmin,
+    signUpCustomer,
+    signUpDriver,
+    resetPassword,
+    getSecurityQuestionByEmail,
+    verifySecurityAnswerAndResetPassword,
+  } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'admin_login'>('login');
@@ -75,11 +86,31 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  // Handle native back button inside Auth views (returns to login)
+  // Security Question & Password Recovery state (Registration & Profile)
+  const [securityQuestion, setSecurityQuestion] = useState<string>(SECURITY_QUESTIONS[0]);
+  const [securityAnswer, setSecurityAnswer] = useState<string>('');
+  const [showSecurityAnswer, setShowSecurityAnswer] = useState<boolean>(false);
+
+  // Multi-step Forgot Password verification state
+  const [forgotStep, setForgotStep] = useState<'email' | 'question' | 'legacy_phone' | 'success'>('email');
+  const [retrievedQuestion, setRetrievedQuestion] = useState<string>('');
+  const [phoneEnding, setPhoneEnding] = useState<string>('');
+  const [forgotAnswer, setForgotAnswer] = useState<string>('');
+  const [showForgotAnswer, setShowForgotAnswer] = useState<boolean>(false);
+  const [forgotPhoneInput, setForgotPhoneInput] = useState<string>('');
+  const [verifiedEmail, setVerifiedEmail] = useState<string>('');
+
+  // Handle native back button inside Auth views (returns to login or previous step)
   useBackHandler(
     mode !== 'login',
     () => {
+      if (mode === 'forgot' && (forgotStep === 'question' || forgotStep === 'legacy_phone')) {
+        setForgotStep('email');
+        setErrorMsg(null);
+        return true;
+      }
       setMode('login');
+      setForgotStep('email');
       setErrorMsg(null);
       setSuccessMsg(null);
       return true;
@@ -255,6 +286,15 @@ export const AuthModal: React.FC = () => {
         return;
       }
 
+      if (!securityQuestion) {
+        setErrorMsg('Please select a security question for password recovery.');
+        return;
+      }
+      if (!securityAnswer.trim() || securityAnswer.trim().length < 2) {
+        setErrorMsg('Please enter a secret security answer with at least 2 characters.');
+        return;
+      }
+
       if (roleSelection === 'driver') {
         if (!driverLicenseNumber.trim()) {
           setErrorMsg("Official Driver's License Number is required for driver registration.");
@@ -268,16 +308,31 @@ export const AuthModal: React.FC = () => {
       }
     }
 
+    if (mode === 'forgot') {
+      handleForgotLookup(e);
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (mode === 'login') {
+        const cleanIdentifier = email.trim().toLowerCase();
+        if (
+          cleanIdentifier === 'admin' ||
+          cleanIdentifier === 'admin@eshuttle.com' ||
+          cleanIdentifier.startsWith('admin@')
+        ) {
+          setErrorMsg('Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.');
+          setLoading(false);
+          return;
+        }
         await signIn(email, password);
       } else if (mode === 'admin_login') {
         await signInAdmin(email, password);
       } else if (mode === 'register') {
         if (roleSelection === 'customer') {
-          await signUpCustomer(fullName, email, phone, password);
+          await signUpCustomer(fullName, email, phone, password, securityQuestion, securityAnswer);
         } else if (roleSelection === 'driver') {
           if (!driverLicenseCardUrl) {
             setErrorMsg("Driver's License card photo is required for driver registration and admin validation.");
@@ -292,21 +347,100 @@ export const AuthModal: React.FC = () => {
             'E-Shuttle Transit',
             'Unassigned E-Shuttle',
             driverLicenseCardUrl,
-            driverLicenseNumber
+            driverLicenseNumber,
+            securityQuestion,
+            securityAnswer
           );
         }
-      } else if (mode === 'forgot') {
-        if (!email) {
-          setErrorMsg('Please enter your account email address.');
-          setLoading(false);
-          return;
-        }
-        await resetPassword(email);
-        setSuccessMsg(`Password reset link sent to ${email}. Check your email inbox!`);
       }
     } catch (err: any) {
       console.error('Firebase Auth error:', err);
       setErrorMsg(formatFirebaseError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotLookup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const emailErr = getEmailValidationError(cleanEmail);
+    if (emailErr) {
+      setErrorMsg(emailErr);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await getSecurityQuestionByEmail(cleanEmail);
+      if (!res.userFound) {
+        setErrorMsg('No registered account was found with this email address. Please double-check your email or sign up.');
+        setLoading(false);
+        return;
+      }
+
+      setVerifiedEmail(cleanEmail);
+      if (res.hasQuestion && res.question) {
+        setRetrievedQuestion(res.question);
+        setForgotAnswer('');
+        setForgotStep('question');
+      } else {
+        setPhoneEnding(res.phoneEnding || '');
+        setForgotPhoneInput('');
+        setForgotStep('legacy_phone');
+      }
+    } catch (err: any) {
+      console.error('Lookup error:', err);
+      setErrorMsg(formatFirebaseError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyAnswerAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!forgotAnswer.trim()) {
+      setErrorMsg('Please enter your secret security answer.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await verifySecurityAnswerAndResetPassword(verifiedEmail, forgotAnswer);
+      setForgotStep('success');
+      setSuccessMsg(`Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`);
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      setErrorMsg(err?.message || 'Incorrect security answer. Please check and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!forgotPhoneInput.trim()) {
+      setErrorMsg('Please enter your registered mobile number.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await verifySecurityAnswerAndResetPassword(verifiedEmail, '', forgotPhoneInput);
+      setForgotStep('success');
+      setSuccessMsg(`Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`);
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      setErrorMsg(err?.message || 'Mobile number verification failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -397,40 +531,307 @@ export const AuthModal: React.FC = () => {
           </div>
         )}
 
-        {/* Forgot Password Header Back Button */}
-        {mode === 'forgot' && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('login');
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              className="px-2.5 py-1 text-xs text-white bg-[#0D47A1] hover:bg-[#1565C0] border border-[#0D47A1] rounded-xl transition-colors font-bold uppercase"
-            >
-              Back
-            </button>
-            <span className="text-sm font-bold text-[#0D47A1]">Reset Password</span>
-          </div>
-        )}
+        {/* Forgot Password Recovery vs Standard Form */}
+        {mode === 'forgot' ? (
+          <div className="space-y-4">
+            {/* Step progress banner */}
+            <div className="bg-[#E3F2FD] border border-[#0D47A1]/30 rounded-2xl p-3 flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#0D47A1] text-white flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 shadow-sm">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-[#0D47A1] uppercase tracking-wide">
+                  {forgotStep === 'email' && 'Step 1 of 2: Account Lookup'}
+                  {forgotStep === 'question' && 'Step 2 of 2: Secret Security Question'}
+                  {forgotStep === 'legacy_phone' && 'Step 2 of 2: Mobile Number Confirmation'}
+                  {forgotStep === 'success' && 'Reset Link Dispatched'}
+                </h4>
+                <p className="text-[11px] text-slate-600 leading-snug mt-0.5 font-medium">
+                  {forgotStep === 'email' && 'Enter your email address. We will retrieve your secret question before sending any password reset link.'}
+                  {forgotStep === 'question' && 'Answer your secret security question to verify your identity before resetting password.'}
+                  {forgotStep === 'legacy_phone' && 'Legacy account detected. Confirm your registered mobile number to proceed.'}
+                  {forgotStep === 'success' && 'Your identity was successfully verified and a reset email has been dispatched.'}
+                </p>
+              </div>
+            </div>
 
-        {/* Success Alert */}
-        {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs rounded-xl font-medium">
-            {successMsg}
-          </div>
-        )}
+            {/* Error Banner */}
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-2xl text-rose-700 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <span className="font-semibold">{errorMsg}</span>
+              </div>
+            )}
 
-        {/* Error Alert */}
-        {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-300 text-rose-700 text-xs rounded-xl text-center font-medium">
-            {errorMsg}
-          </div>
-        )}
+            {/* Success Banner */}
+            {successMsg && forgotStep !== 'success' && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-800 text-xs flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                <span className="font-semibold">{successMsg}</span>
+              </div>
+            )}
 
-        {/* Auth Form */}
-        <form onSubmit={handleSubmit} className="space-y-3">
+            {/* STEP 1: Email Lookup */}
+            {forgotStep === 'email' && (
+              <form onSubmit={handleForgotLookup} className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-[#0D47A1]">Registered Email Address</label>
+                    {isEmailFormatValid && (
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Valid email
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    placeholder="e.g., name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={`w-full mt-1 bg-[#F8FAFC] border-2 rounded-xl p-2.5 text-xs placeholder-slate-400 focus:outline-none transition-colors ${
+                      emailValidationError
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20 text-rose-900'
+                        : isEmailFormatValid
+                        ? 'border-emerald-500 focus:border-emerald-600 focus:bg-white text-[#0D47A1]'
+                        : 'border-[#0D47A1] focus:border-[#1565C0] focus:bg-white text-[#0D47A1]'
+                    }`}
+                  />
+                  {emailValidationError && (
+                    <p className="text-[10px] text-rose-600 mt-1 flex items-start gap-1 font-semibold leading-tight">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{emailValidationError}</span>
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                    We will look up the secret security question associated with this account.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 bg-[#0D47A1] hover:bg-[#1565C0] shadow-blue-900/25 uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    'Checking Account...'
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Continue to Security Question</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                  }}
+                  className="w-full py-2.5 text-xs font-bold text-[#0D47A1] hover:bg-[#E3F2FD] rounded-xl transition-colors text-center"
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            )}
+
+            {/* STEP 2: Answer Security Question */}
+            {forgotStep === 'question' && (
+              <form onSubmit={handleVerifyAnswerAndReset} className="space-y-4">
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="truncate">
+                    <span className="text-[9px] text-slate-400 uppercase font-bold block">Account</span>
+                    <span className="text-xs font-bold text-[#0D47A1] truncate block">{verifiedEmail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStep('email');
+                      setErrorMsg(null);
+                    }}
+                    className="text-[10px] text-[#0D47A1] underline font-bold shrink-0 hover:text-blue-700"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="bg-[#E3F2FD]/50 border-2 border-[#0D47A1] rounded-2xl p-3.5 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#0D47A1]">
+                    <Key className="w-4 h-4 text-[#0D47A1]" />
+                    <span>Your Secret Security Question:</span>
+                  </div>
+                  <p className="text-xs font-extrabold text-slate-900 bg-white p-3 rounded-xl border border-[#0D47A1]/30 shadow-sm leading-relaxed">
+                    "{retrievedQuestion}"
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-[#0D47A1] block mb-1">
+                    Your Secret Answer
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showForgotAnswer ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      placeholder="Enter your secret answer"
+                      value={forgotAnswer}
+                      onChange={(e) => setForgotAnswer(e.target.value)}
+                      className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] focus:border-[#1565C0] rounded-xl p-2.5 pr-10 text-xs text-[#0D47A1] font-semibold focus:outline-none focus:bg-white transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotAnswer((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#0D47A1] hover:text-[#1565C0] p-1 rounded-lg transition-colors focus:outline-none"
+                      title={showForgotAnswer ? 'Hide answer' : 'Show answer'}
+                    >
+                      {showForgotAnswer ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Answers are matched without case-sensitivity.</p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 bg-[#0D47A1] hover:bg-[#1565C0] shadow-blue-900/25 uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    'Verifying Answer...'
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Verify Answer & Send Reset Email</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotStep('email');
+                    setErrorMsg(null);
+                  }}
+                  className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-[#0D47A1] rounded-xl transition-colors text-center"
+                >
+                  Back to Email Entry
+                </button>
+              </form>
+            )}
+
+            {/* STEP 2 (LEGACY): Fallback Phone Number Confirmation */}
+            {forgotStep === 'legacy_phone' && (
+              <form onSubmit={handleVerifyPhoneAndReset} className="space-y-4">
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="truncate">
+                    <span className="text-[9px] text-slate-400 uppercase font-bold block">Account</span>
+                    <span className="text-xs font-bold text-[#0D47A1] truncate block">{verifiedEmail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStep('email');
+                      setErrorMsg(null);
+                    }}
+                    className="text-[10px] text-[#0D47A1] underline font-bold shrink-0 hover:text-blue-700"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl text-amber-800 text-xs space-y-1">
+                  <div className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span>Legacy Account Notice</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed font-medium">
+                    This account was created prior to security questions. To protect your account, please confirm your registered mobile number{phoneEnding ? ` (ending in ••••${phoneEnding})` : ''}.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-[#0D47A1] block mb-1">
+                    Registered Mobile Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    autoFocus
+                    placeholder="0917 123 4567 or last 4 digits"
+                    value={forgotPhoneInput}
+                    onChange={(e) => setForgotPhoneInput(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] focus:border-[#1565C0] rounded-xl p-2.5 text-xs text-[#0D47A1] font-semibold focus:outline-none focus:bg-white transition-colors"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 bg-[#0D47A1] hover:bg-[#1565C0] shadow-blue-900/25 uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    'Verifying Mobile...'
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Verify Phone & Send Reset Email</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotStep('email');
+                    setErrorMsg(null);
+                  }}
+                  className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-[#0D47A1] rounded-xl transition-colors text-center"
+                >
+                  Back to Email Entry
+                </button>
+              </form>
+            )}
+
+            {/* STEP 3: SUCCESS */}
+            {forgotStep === 'success' && (
+              <div className="text-center space-y-4 py-2">
+                <div className="w-16 h-16 bg-emerald-100 border-2 border-emerald-500 text-emerald-600 rounded-3xl mx-auto flex items-center justify-center shadow-lg">
+                  <CheckCircle className="w-8 h-8 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#0D47A1]">Password Reset Dispatched!</h3>
+                  <p className="text-xs text-slate-600 mt-1 max-w-xs mx-auto leading-relaxed">
+                    Identity verified via security protocol. We have dispatched a password reset email to:
+                  </p>
+                  <div className="mt-2 inline-block px-3 py-1 bg-[#E3F2FD] border border-[#0D47A1] rounded-xl text-xs font-mono font-bold text-[#0D47A1]">
+                    {verifiedEmail}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    Please open the link in that email to set your new password, then return here to sign in.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setForgotStep('email');
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                  }}
+                  className="w-full py-3.5 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 bg-[#0D47A1] hover:bg-[#1565C0] shadow-blue-900/25 uppercase tracking-wider"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Standard Auth Form */
+          <form onSubmit={handleSubmit} className="space-y-3">
           {mode === 'register' && (
             <>
               {/* Role Selection */}
@@ -727,8 +1128,6 @@ export const AuthModal: React.FC = () => {
                   ? 'Admin Username or Email'
                   : mode === 'register'
                   ? 'Email Address'
-                  : mode === 'forgot'
-                  ? 'Account Email Address'
                   : 'Email or Username'}
               </label>
               {isEmailFormatValid && (
@@ -738,15 +1137,13 @@ export const AuthModal: React.FC = () => {
               )}
             </div>
             <input
-              type={mode === 'register' || mode === 'forgot' ? 'email' : 'text'}
+              type={mode === 'register' ? 'email' : 'text'}
               required
               placeholder={
                 mode === 'admin_login'
                   ? 'admin or admin@eshuttle.com'
                   : mode === 'register'
                   ? 'e.g., name@example.com'
-                  : mode === 'forgot'
-                  ? 'name@example.com'
                   : 'username or user@example.com'
               }
               value={email}
@@ -772,16 +1169,15 @@ export const AuthModal: React.FC = () => {
             )}
           </div>
 
-          {mode !== 'forgot' && (
-            <div>
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-[#0D47A1]">Password</label>
-                {mode === 'register' && isPasswordValid && (
-                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Valid password
-                  </span>
-                )}
-                {(mode === 'login' || mode === 'admin_login') && (
+          <div>
+            <div className="flex justify-between items-center">
+              <label className="text-[11px] font-bold text-[#0D47A1]">Password</label>
+              {mode === 'register' && isPasswordValid && (
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Valid password
+                </span>
+              )}
+              {(mode === 'login' || mode === 'admin_login') && (
                   <button
                     type="button"
                     onClick={() => {
@@ -835,6 +1231,62 @@ export const AuthModal: React.FC = () => {
                 </p>
               )}
             </div>
+
+          {/* Approach A: Curated Security Question dropdown + answer setup on registration */}
+          {mode === 'register' && (
+            <div className="pt-2 border-t border-[#0D47A1]/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-extrabold text-[#0D47A1] flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#0D47A1]" />
+                  <span>Security Question (Password Recovery)</span>
+                  <span className="text-rose-600 font-bold text-xs">*Required</span>
+                </label>
+                {securityAnswer.trim().length >= 2 && (
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Configured
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 leading-tight font-medium">
+                Choose a secret question and answer. You must answer this if you ever need to reset your password.
+              </p>
+              <select
+                value={securityQuestion}
+                onChange={(e) => setSecurityQuestion(e.target.value)}
+                className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-semibold focus:outline-none focus:border-[#1565C0] focus:bg-white"
+              >
+                {SECURITY_QUESTIONS.map((q) => (
+                  <option key={q} value={q} className="text-slate-800">
+                    {q}
+                  </option>
+                ))}
+              </select>
+              <div className="relative">
+                <input
+                  type={showSecurityAnswer ? 'text' : 'password'}
+                  required
+                  placeholder="Secret answer (e.g., Fluffy, Rizal High, Adobo)"
+                  value={securityAnswer}
+                  onChange={(e) => setSecurityAnswer(e.target.value)}
+                  className={`w-full bg-[#F8FAFC] border-2 rounded-xl p-2.5 pr-10 text-xs placeholder-slate-400 focus:outline-none transition-colors ${
+                    securityAnswer.trim().length >= 2
+                      ? 'border-emerald-500 focus:border-emerald-600 focus:bg-white text-[#0D47A1]'
+                      : 'border-[#0D47A1] focus:border-[#1565C0] focus:bg-white text-[#0D47A1]'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityAnswer((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#0D47A1] hover:text-[#1565C0] p-1 rounded-lg transition-colors focus:outline-none"
+                  title={showSecurityAnswer ? 'Hide answer' : 'Show answer'}
+                >
+                  {showSecurityAnswer ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {securityAnswer.trim().length < 2 && (
+                <p className="text-[10px] text-slate-400">At least 2 characters required.</p>
+              )}
+            </div>
           )}
 
           <button
@@ -857,11 +1309,10 @@ export const AuthModal: React.FC = () => {
               ? 'Sign In (Admin)'
               : mode === 'login'
               ? 'Sign In'
-              : mode === 'register'
-              ? `Register ${roleSelection === 'customer' ? 'User' : 'Driver'}`
-              : 'Reset Password'}
+              : `Register ${roleSelection === 'customer' ? 'User' : 'Driver'}`}
           </button>
         </form>
+        )}
 
         {/* Return link when in Admin mode */}
         {mode === 'admin_login' && (

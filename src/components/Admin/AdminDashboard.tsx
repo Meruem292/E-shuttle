@@ -18,7 +18,7 @@ import { EBikeManagement } from './EBikeManagement';
 import { AdminEBikeMap } from './AdminEBikeMap';
 import { StationManagement } from './StationManagement';
 import { ZoneManagement } from './ZoneManagement';
-import { ActivityLogsView } from './ActivityLogsView';
+import ActivityLogsView from './ActivityLogsView';
 import { AdminTutorialModal } from './AdminTutorialModal';
 import { listenToOperationalZones } from '../../services/zoneService';
 import { OperationalZone } from '../../types';
@@ -1350,6 +1350,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
+      {/* ACCOUNTS & SAFETY SUB-NAV PILLS */}
+      {['users', 'customers', 'drivers', 'incidents'].includes(currentTab) && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'users' || currentTab === 'customers' || currentTab === 'drivers'
+                ? 'bg-[#0D47A1] text-white shadow-md'
+                : 'bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Passenger & Driver Accounts ({customersOnly.length + drivers.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('incidents')}
+            className={`px-3.5 py-2 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+              currentTab === 'incidents'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'bg-white border-2 border-rose-600 text-rose-700 hover:bg-rose-50'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Safety & Incident Reports ({incidentTickets.length})</span>
+          </button>
+        </div>
+      )}
+
       {/* OPERATIONS SUB-NAV PILLS */}
       {['ebikes', 'stations', 'zones', 'rides'].includes(currentTab) && (
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
@@ -1599,6 +1628,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('logs')}
+                  title="View system activity audit trail and CRUD logs"
+                  className="px-3.5 py-1.5 bg-white border-2 border-[#0D47A1] text-[#0D47A1] hover:bg-[#E3F2FD] rounded-xl text-xs font-black uppercase transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                >
+                  <ClipboardList className="w-3.5 h-3.5 text-[#0D47A1]" />
+                  <span>Audit Logs</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setEbikeSubTab('simulator');

@@ -21,6 +21,17 @@ export interface LocationPoint {
   updatedAt?: string | number;
 }
 
+export const SECURITY_QUESTIONS = [
+  'What was the name of your first elementary school?',
+  'In what city or municipality were you born?',
+  'What was your childhood nickname?',
+  'What was the name of your first pet?',
+  'What is the street name where you grew up?',
+  'What was the brand or model of your first bicycle or car?',
+] as const;
+
+export type SecurityQuestion = (typeof SECURITY_QUESTIONS)[number];
+
 export interface UserProfile {
   uid: string;
   role: UserRole;
@@ -30,6 +41,8 @@ export interface UserProfile {
   phone: string;
   photoURL?: string;
   accountStatus: AccountStatus;
+  securityQuestion?: string;
+  securityAnswer?: string;
   createdAt: any;
   updatedAt: any;
 }
@@ -50,6 +63,8 @@ export interface DriverProfile {
   rfidCardUid?: string; // Tag UID assigned to driver e.g. "A3-4F-89-12"
   driverLicenseCardUrl?: string; // Driver's license card picture for admin validation
   driverLicenseNumber?: string; // Optional Driver's License Number
+  securityQuestion?: string;
+  securityAnswer?: string;
   activeEbikeId?: string | null; // Device ID of the e-shuttle currently taken over by driver
   disconnectNotice?: string | null; // Alert message when driver is automatically logged out/disconnected by a new RFID tap
   currentLocation?: LocationPoint;
@@ -133,6 +148,7 @@ export interface AdminSettings {
   pricePerKm: number;
   minimumFare: number;
   initialSearchRadiusKm: number;
+  maxServiceRadiusKm?: number;
   appLogoUrl?: string;
   mediaStorageBucket?: string;
   updatedAt?: any;

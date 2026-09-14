@@ -5,6 +5,7 @@ import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
+import { SecurityQuestionCard } from '../Common/SecurityQuestionCard';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
@@ -70,6 +71,9 @@ export const CustomerProfile: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Security Question & Password Recovery Card */}
+      <SecurityQuestionCard />
 
       {/* FAQs & Information Center Card */}
       <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-xl">

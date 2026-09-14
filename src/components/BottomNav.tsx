@@ -351,99 +351,83 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       (actionDots.ebikes || actionDots.stations || actionDots.zones || actionDots.rides) &&
       !['ebikes', 'stations', 'zones', 'rides'].some((t) => seenTabs[t]) &&
       !['ebikes', 'stations', 'zones', 'rides'].includes(activeTab);
-    const showUsersDot =
-      (actionDots.users || actionDots.drivers || actionDots.customers) &&
-      !seenTabs.users &&
-      !['users', 'customers', 'drivers'].includes(activeTab);
-    const showIncidentsDot = actionDots.incidents && !seenTabs.incidents && activeTab !== 'incidents';
-    const showSettingsDot =
+    const showAccountsSafetyDot =
+      (actionDots.users || actionDots.drivers || actionDots.customers || actionDots.incidents) &&
+      !['users', 'customers', 'drivers', 'incidents'].some((t) => seenTabs[t]) &&
+      !['users', 'customers', 'drivers', 'incidents'].includes(activeTab);
+    const showSettingsLogsDot =
       (actionDots.settings || actionDots.logs) &&
       !['settings', 'logs', 'audit'].some((t) => seenTabs[t]) &&
       !['settings', 'logs', 'audit'].includes(activeTab);
 
     const isOperationsActive = ['ebikes', 'stations', 'zones', 'rides'].includes(activeTab);
-    const isSettingsActive = ['settings', 'logs', 'audit'].includes(activeTab);
+    const isAccountsSafetyActive = ['users', 'customers', 'drivers', 'incidents'].includes(activeTab);
+    const isSettingsLogsActive = ['settings', 'logs', 'audit'].includes(activeTab);
 
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-2 sm:px-6 py-2 flex items-center justify-around max-w-4xl mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-2 sm:px-6 py-2 flex items-center justify-around max-w-2xl mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
           onClick={() => handleTabClick('dashboard')}
-          title="Overview & Analytics"
-          className={`flex flex-col items-center gap-0.5 text-[10px] sm:text-xs py-1.5 px-3 rounded-2xl transition-all ${
+          title="Overview & Live Monitoring"
+          className={`flex flex-col items-center gap-1 text-xs py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'dashboard' || activeTab === 'map'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
           <div className="relative flex items-center justify-center">
-            <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' || activeTab === 'map' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            <LayoutDashboard className={`w-5 h-5 ${activeTab === 'dashboard' || activeTab === 'map' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showDashboardDot && <RedDot />}
           </div>
-          <span className="truncate">Overview</span>
+          <span className="text-[11px]">Overview</span>
         </button>
 
         <button
           onClick={() => handleTabClick(isOperationsActive ? activeTab : 'ebikes')}
-          title="Shuttle Fleet, Stations, Zones & Trips"
-          className={`flex flex-col items-center gap-0.5 text-[10px] sm:text-xs py-1.5 px-3 rounded-2xl transition-all ${
+          title="Fleet, Stations, Zones & Trips"
+          className={`flex flex-col items-center gap-1 text-xs py-1.5 px-3 rounded-2xl transition-all ${
             isOperationsActive
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
           <div className="relative flex items-center justify-center">
-            <Route className={`w-4 h-4 ${isOperationsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            <Route className={`w-5 h-5 ${isOperationsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showOperationsDot && <RedDot />}
           </div>
-          <span className="truncate">Operations</span>
+          <span className="text-[11px]">Operations</span>
         </button>
 
         <button
-          onClick={() => handleTabClick('users')}
-          title="User accounts, Drivers & RFID Cards"
-          className={`flex flex-col items-center gap-0.5 text-[10px] sm:text-xs py-1.5 px-3 rounded-2xl transition-all ${
-            activeTab === 'users' || activeTab === 'customers' || activeTab === 'drivers'
+          onClick={() => handleTabClick(isAccountsSafetyActive ? activeTab : 'users')}
+          title="Accounts, Driver Approvals, RFID & Incident Reports"
+          className={`flex flex-col items-center gap-1 text-xs py-1.5 px-3 rounded-2xl transition-all ${
+            isAccountsSafetyActive
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
           <div className="relative flex items-center justify-center">
-            <Users className={`w-4 h-4 ${activeTab === 'users' || activeTab === 'customers' || activeTab === 'drivers' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
-            {showUsersDot && <RedDot />}
+            <Users className={`w-5 h-5 ${isAccountsSafetyActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showAccountsSafetyDot && <RedDot />}
           </div>
-          <span className="truncate">Accounts</span>
+          <span className="text-[11px]">Accounts</span>
         </button>
 
         <button
-          onClick={() => handleTabClick('incidents')}
-          title="Incidents & Helpdesk Chat Threads"
-          className={`flex flex-col items-center gap-0.5 text-[10px] sm:text-xs py-1.5 px-3 rounded-2xl transition-all ${
-            activeTab === 'incidents'
-              ? 'text-white bg-rose-600 font-extrabold shadow-md border border-rose-600'
-              : 'text-rose-700 hover:text-rose-900 font-bold'
-          }`}
-        >
-          <div className="relative flex items-center justify-center">
-            <ShieldAlert className={`w-4 h-4 ${activeTab === 'incidents' ? 'text-white' : 'text-rose-600'}`} />
-            {showIncidentsDot && <RedDot />}
-          </div>
-          <span className="truncate">Incidents</span>
-        </button>
-
-        <button
-          onClick={() => handleTabClick(isSettingsActive ? activeTab : 'settings')}
-          title="Dispatch Settings & Activity Audit Logs"
-          className={`flex flex-col items-center gap-0.5 text-[10px] sm:text-xs py-1.5 px-3 rounded-2xl transition-all ${
-            isSettingsActive
+          onClick={() => handleTabClick(isSettingsLogsActive ? activeTab : 'settings')}
+          title="Dispatch Settings & System Audit Logs"
+          className={`flex flex-col items-center gap-1 text-xs py-1.5 px-3 rounded-2xl transition-all ${
+            isSettingsLogsActive
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
           <div className="relative flex items-center justify-center">
-            <Settings className={`w-4 h-4 ${isSettingsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
-            {showSettingsDot && <RedDot />}
+            <Settings className={`w-5 h-5 ${isSettingsLogsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showSettingsLogsDot && <RedDot />}
           </div>
-          <span className="truncate">Settings</span>
+          <span className="text-[11px]">Settings & Logs</span>
         </button>
       </div>
     );

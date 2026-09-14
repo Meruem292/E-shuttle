@@ -21,6 +21,7 @@ export type ActivityAction =
   | 'AUTH_LOGIN'
   | 'AUTH_LOGOUT'
   | 'AUTH_REGISTER'
+  | 'AUTH_FORGOT_PASSWORD'
   | 'SETTINGS_UPDATE';
 
 export type ActivityEntityType =

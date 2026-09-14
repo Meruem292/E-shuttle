@@ -242,7 +242,7 @@ export const MapView: React.FC<MapViewProps> = ({
               <div>
                 <div class="flex items-center justify-between gap-1">
                   <div class="flex items-center gap-1">
-                    <span class="w-2 h-2 rounded-full ${st.isActive !== false ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+                    <span class="w-2 h-2 rounded-full ${st.isActive ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
                     <b class="text-xs text-[#0D47A1] font-black">${st.name}</b>
                   </div>
                   <span class="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-100 text-[#0D47A1]">

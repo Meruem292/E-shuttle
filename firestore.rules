@@ -64,6 +64,9 @@ service cloud.firestore {
     match /zones/{zoneId} {
       allow read, write: if true;
     }
+    match /operational_zones/{zoneId} {
+      allow read, write: if true;
+    }
 
     // E-Bikes Fleet & Hardware RFID Telemetry
     match /ebikes/{bikeId} {

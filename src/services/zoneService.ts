@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDocs,
   getDoc,
   updateDoc,
@@ -19,10 +20,10 @@ import { logActivity } from './activityLogService';
 
 export const ZONES_COLLECTION = 'operational_zones';
 const LOCAL_STORAGE_ZONES_KEY = 'eshuttle_operational_zones_cache';
-const LOCAL_DELETED_ZONES_KEY = 'eshuttle_deleted_zone_ids';
 
-export const DEFAULT_INITIAL_ZONES: Omit<OperationalZone, 'id'>[] = [
+export const DEFAULT_INITIAL_ZONES: (Omit<OperationalZone, 'id'> & { defaultId: string })[] = [
   {
+    defaultId: 'zone-tagaytay-city-hall',
     name: 'Tagaytay City Hall & Government Center',
     code: 'tagaytay-city-hall',
     description: 'Primary administrative hub and central shuttle terminal boundary',
@@ -32,45 +33,26 @@ export const DEFAULT_INITIAL_ZONES: Omit<OperationalZone, 'id'>[] = [
     isActive: true,
   },
   {
+    defaultId: 'zone-tagaytay-high-school',
     name: 'Tagaytay City National High School Campus',
     code: 'tagaytay-high-school',
     description: 'Educational district and student transit geofence',
-    centerLatitude: 14.1180,
-    centerLongitude: 120.9670,
+    centerLatitude: 14.118,
+    centerLongitude: 120.967,
     radiusMeters: 1200,
     isActive: true,
   },
 ];
 
-function getDeletedZoneIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(LOCAL_DELETED_ZONES_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr);
-    }
-  } catch {}
-  return new Set();
-}
-
-function markZoneAsDeleted(id: string) {
-  try {
-    const current = getDeletedZoneIds();
-    current.add(id);
-    localStorage.setItem(LOCAL_DELETED_ZONES_KEY, JSON.stringify(Array.from(current)));
-  } catch {}
-}
-
 function getLocalZones(): OperationalZone[] {
   try {
-    const deleted = getDeletedZoneIds();
     const raw = localStorage.getItem(LOCAL_STORAGE_ZONES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const uniqueMap = new Map<string, OperationalZone>();
         for (const z of parsed) {
-          if (z && z.id && !deleted.has(z.id)) uniqueMap.set(z.id, z);
+          if (z && z.id) uniqueMap.set(z.id, z);
         }
         return Array.from(uniqueMap.values());
       }
@@ -83,10 +65,9 @@ function getLocalZones(): OperationalZone[] {
 
 function saveLocalZones(zones: OperationalZone[]) {
   try {
-    const deleted = getDeletedZoneIds();
     const uniqueMap = new Map<string, OperationalZone>();
     for (const z of zones) {
-      if (z && z.id && !deleted.has(z.id)) uniqueMap.set(z.id, z);
+      if (z && z.id) uniqueMap.set(z.id, z);
     }
     const deduplicated = Array.from(uniqueMap.values());
     localStorage.setItem(LOCAL_STORAGE_ZONES_KEY, JSON.stringify(deduplicated));
@@ -97,17 +78,24 @@ function saveLocalZones(zones: OperationalZone[]) {
 
 function seedDefaultZonesIfEmptySync(): OperationalZone[] {
   const now = new Date().toISOString();
-  const created = DEFAULT_INITIAL_ZONES.map((def, idx) => ({
-    id: `default-zone-${idx + 1}`,
-    ...def,
+  const created: OperationalZone[] = DEFAULT_INITIAL_ZONES.map((def) => ({
+    id: def.defaultId,
+    name: def.name,
+    code: def.code,
+    description: def.description,
+    centerLatitude: def.centerLatitude,
+    centerLongitude: def.centerLongitude,
+    radiusMeters: def.radiusMeters,
+    isActive: def.isActive,
     createdAt: now,
     updatedAt: now,
   }));
   saveLocalZones(created);
 
-  // Asynchronously push default zones to Firestore so they sync remotely
+  // Asynchronously push default zones to Firestore with deterministic document IDs
   for (const z of created) {
-    addDoc(collection(db, ZONES_COLLECTION), {
+    const zoneRef = doc(db, ZONES_COLLECTION, z.id);
+    setDoc(zoneRef, {
       ...z,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -131,12 +119,11 @@ function notifyLocalZoneSubscribers() {
 export function listenToOperationalZones(
   callback: (zones: OperationalZone[]) => void
 ): () => void {
-  // Provide initial zones immediately
-  let initial = getLocalZones();
-  if (initial.length === 0) {
-    initial = seedDefaultZonesIfEmptySync();
+  // Provide initial zones immediately from cache
+  const initial = getLocalZones();
+  if (initial.length > 0) {
+    callback(initial);
   }
-  callback(initial);
   localZoneSubscribers.add(callback);
 
   let isUnsubscribed = false;
@@ -149,39 +136,35 @@ export function listenToOperationalZones(
       q,
       (snapshot) => {
         if (isUnsubscribed) return;
-        const deletedIds = getDeletedZoneIds();
-        const remoteZones: OperationalZone[] = snapshot.docs
-          .map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<OperationalZone, 'id'>),
-          }))
-          .filter((z) => !deletedIds.has(z.id));
+        const remoteZones: OperationalZone[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<OperationalZone, 'id'>),
+        }));
 
-        // Merge remote list with any local unsynced zones
-        const localList = getLocalZones().filter((z) => !deletedIds.has(z.id));
-        const remoteIds = new Set(remoteZones.map((z) => z.id));
-        const unsyncedLocal = localList.filter((z) => !remoteIds.has(z.id));
-
-        let merged = [...remoteZones, ...unsyncedLocal];
-
-        // Seed initial defaults if system has zero zones
-        if (merged.length === 0 && deletedIds.size === 0) {
-          merged = seedDefaultZonesIfEmptySync();
+        if (remoteZones.length === 0) {
+          const localList = getLocalZones();
+          if (localList.length === 0) {
+            const seeded = seedDefaultZonesIfEmptySync();
+            callback(seeded);
+            return;
+          }
         }
 
-        saveLocalZones(merged);
-        callback(merged);
+        saveLocalZones(remoteZones);
+        callback(remoteZones);
       },
       (err) => {
         console.warn('Firestore zones listener fallback to local cache:', err.message);
         if (!isUnsubscribed) {
-          callback(getLocalZones());
+          const fallback = getLocalZones();
+          callback(fallback.length > 0 ? fallback : seedDefaultZonesIfEmptySync());
         }
       }
     );
   } catch (err) {
     console.warn('Error setting up Firestore zones listener, using local:', err);
-    callback(getLocalZones());
+    const fallback = getLocalZones();
+    callback(fallback.length > 0 ? fallback : seedDefaultZonesIfEmptySync());
   }
 
   return () => {
@@ -224,17 +207,19 @@ export async function addOperationalZone(
     isActive: zone.isActive ?? true,
   };
 
-  let assignedId = `zone-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const generatedId = `zone-${(newZoneData.code || 'area')}-${Math.random().toString(36).substring(2, 7)}`;
+  let assignedId = generatedId;
 
   try {
-    const docRef = await addDoc(collection(db, ZONES_COLLECTION), {
+    const zoneRef = doc(db, ZONES_COLLECTION, generatedId);
+    await setDoc(zoneRef, {
       ...newZoneData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    assignedId = docRef.id;
+    assignedId = generatedId;
   } catch (err) {
-    console.warn('Firestore addDoc zone fallback to local cache:', err);
+    console.warn('Firestore setDoc zone fallback to local cache:', err);
   }
 
   const localList = getLocalZones();
@@ -248,20 +233,24 @@ export async function addOperationalZone(
   saveLocalZones([...filteredList, fullZone]);
   notifyLocalZoneSubscribers();
 
-  // Audit log creation
-  logActivity({
-    action: 'CREATE',
-    actionLabel: 'Created Service Zone',
-    entityType: 'ZONE',
-    entityId: assignedId,
-    entityName: newZoneData.name,
-    summary: `Created geofence service zone "${newZoneData.name}" with radius ${newZoneData.radiusMeters}m`,
-    details: {
-      summary: `Zone registered with boundary center [${newZoneData.centerLatitude}, ${newZoneData.centerLongitude}]`,
-      after: newZoneData,
-    },
-    severity: 'success',
-  }).catch(() => {});
+  // Audit log creation (awaited for guarantee)
+  try {
+    await logActivity({
+      action: 'CREATE',
+      actionLabel: 'Created Service Zone',
+      entityType: 'ZONE',
+      entityId: assignedId,
+      entityName: newZoneData.name,
+      summary: `Created geofence service zone "${newZoneData.name}" with radius ${newZoneData.radiusMeters}m`,
+      details: {
+        summary: `Zone registered with boundary center [${newZoneData.centerLatitude}, ${newZoneData.centerLongitude}]`,
+        after: newZoneData,
+      },
+      severity: 'success',
+    });
+  } catch (logErr) {
+    console.warn('Could not log zone creation:', logErr);
+  }
 
   return assignedId;
 }
@@ -291,32 +280,54 @@ export async function updateOperationalZone(
   notifyLocalZoneSubscribers();
 
   // Audit log update
-  logActivity({
-    action: 'UPDATE',
-    actionLabel: 'Updated Service Zone',
-    entityType: 'ZONE',
-    entityId: id,
-    entityName: updates.name || existing?.name || id,
-    summary: `Updated geofence zone "${updates.name || existing?.name || id}"`,
-    details: {
-      summary: `Zone attributes updated: ${Object.keys(updates).join(', ')}`,
-      before: existing ? { ...existing } : null,
-      after: updates,
-    },
-    severity: 'info',
-  }).catch(() => {});
+  try {
+    await logActivity({
+      action: 'UPDATE',
+      actionLabel: 'Updated Service Zone',
+      entityType: 'ZONE',
+      entityId: id,
+      entityName: updates.name || existing?.name || id,
+      summary: `Updated geofence zone "${updates.name || existing?.name || id}"`,
+      details: {
+        summary: `Zone attributes updated: ${Object.keys(updates).join(', ')}`,
+        before: existing ? { ...existing } : null,
+        after: updates,
+      },
+      severity: 'info',
+    });
+  } catch (logErr) {
+    console.warn('Could not log zone update:', logErr);
+  }
 }
 
 /**
  * Delete an operational zone
  */
 export async function deleteOperationalZone(id: string, nameHint?: string): Promise<void> {
-  markZoneAsDeleted(id);
-
   const localList = getLocalZones();
   const existing = localList.find((z) => z.id === id);
   const zoneName = nameHint || existing?.name || id;
 
+  // 1. Audit log deletion FIRST to guarantee all deletion events are recorded
+  try {
+    await logActivity({
+      action: 'DELETE',
+      actionLabel: 'Deleted Service Zone',
+      entityType: 'ZONE',
+      entityId: id,
+      entityName: zoneName,
+      summary: `Deleted geofence service zone "${zoneName}"`,
+      details: {
+        summary: `Geofence zone deleted from system by administrator`,
+        before: existing ? { ...existing } : null,
+      },
+      severity: 'danger',
+    });
+  } catch (logErr) {
+    console.warn('Could not record zone deletion activity log:', logErr);
+  }
+
+  // 2. Delete from remote Firestore database
   try {
     const zoneRef = doc(db, ZONES_COLLECTION, id);
     await deleteDoc(zoneRef);
@@ -324,24 +335,10 @@ export async function deleteOperationalZone(id: string, nameHint?: string): Prom
     console.warn('Firestore deleteDoc zone fallback to local cache:', err);
   }
 
+  // 3. Update local memory and notify subscribers
   const filtered = localList.filter((z) => z.id !== id);
   saveLocalZones(filtered);
   notifyLocalZoneSubscribers();
-
-  // Audit log deletion
-  await logActivity({
-    action: 'DELETE',
-    actionLabel: 'Deleted Service Zone',
-    entityType: 'ZONE',
-    entityId: id,
-    entityName: zoneName,
-    summary: `Deleted geofence service zone "${zoneName}"`,
-    details: {
-      summary: `Geofence zone deleted from system by administrator`,
-      before: existing ? { ...existing } : null,
-    },
-    severity: 'danger',
-  });
 }
 
 import { ShuttleStation } from '../types';

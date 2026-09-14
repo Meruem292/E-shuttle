@@ -59,7 +59,14 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
   signInAdmin: (email: string, pass: string) => Promise<void>;
-  signUpCustomer: (fullName: string, email: string, phone: string, pass: string) => Promise<void>;
+  signUpCustomer: (
+    fullName: string,
+    email: string,
+    phone: string,
+    pass: string,
+    securityQuestion?: string,
+    securityAnswer?: string
+  ) => Promise<void>;
   signUpDriver: (
     fullName: string,
     email: string,
@@ -68,9 +75,25 @@ interface AuthContextType {
     vehicleType?: string,
     vehicleInfo?: string,
     driverLicenseCardUrl?: string,
-    driverLicenseNumber?: string
+    driverLicenseNumber?: string,
+    securityQuestion?: string,
+    securityAnswer?: string
   ) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  getSecurityQuestionByEmail: (email: string) => Promise<{
+    userFound: boolean;
+    hasQuestion: boolean;
+    question?: string;
+    hasPhoneFallback?: boolean;
+    phoneEnding?: string;
+    role?: UserRole;
+  }>;
+  verifySecurityAnswerAndResetPassword: (
+    email: string,
+    answer: string,
+    phoneFallback?: string
+  ) => Promise<void>;
+  updateSecurityQuestion: (question: string, answer: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -302,6 +325,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isCancelled) return;
 
         if (synced) {
+          if (synced.role === 'admin') {
+            const adminSessionValid = sessionStorage.getItem('eshuttle_admin_auth_granted') === 'true';
+            if (!adminSessionValid) {
+              await firebaseSignOut(auth);
+              setUserProfile(null);
+              setDriverProfile(null);
+              setRole(null);
+              setLoading(false);
+              return;
+            }
+          }
+
           if (synced.role === 'driver') {
             setDriverProfile(synced.profile as DriverProfile);
             setUserProfile(null);
@@ -405,7 +440,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (emailOrUsername: string, pass: string) => {
     setLoading(true);
     try {
+      const cleanIdent = emailOrUsername.trim().toLowerCase();
+      if (cleanIdent === 'admin' || cleanIdent === 'admin@eshuttle.com' || cleanIdent.startsWith('admin@')) {
+        throw new Error('Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.');
+      }
+
       const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
+      if (resolvedEmail.toLowerCase() === 'admin@eshuttle.com' || resolvedEmail.toLowerCase().startsWith('admin@')) {
+        throw new Error('Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.');
+      }
+
+      // Check if user is an administrator before authenticating
+      try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', resolvedEmail.toLowerCase()));
+        const snap = await getDocs(q);
+        if (!snap.empty && snap.docs[0].data()?.role === 'admin') {
+          throw new Error('Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.');
+        }
+      } catch (checkErr: any) {
+        if (checkErr.message?.includes('Access Denied')) throw checkErr;
+      }
+
       const res = await signInWithEmailAndPassword(auth, resolvedEmail, pass);
 
       // Instantly synchronize user profile and set appropriate role
@@ -416,7 +472,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(null);
           setDriverProfile(null);
           setRole(null);
-          throw new Error('Access Denied: Administrator accounts must sign in using the Administrator Portal.');
+          throw new Error('Access Denied: Administrator accounts must sign in using the dedicated Administrator Portal.');
         } else if (synced.role === 'driver') {
           setDriverProfile(synced.profile as DriverProfile);
           setUserProfile(null);
@@ -463,6 +519,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRole(null);
         throw new Error('Access Denied: Account does not have administrator privileges.');
       }
+
+      // Explicitly mark session as authenticated through the dedicated admin portal
+      try {
+        sessionStorage.setItem('eshuttle_admin_auth_granted', 'true');
+      } catch {}
 
       if (isAdminEmail && !userSnap.exists()) {
         const adminDoc: UserProfile = {
@@ -526,7 +587,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fullName: string,
     email: string,
     phone: string,
-    pass: string
+    pass: string,
+    securityQuestion?: string,
+    securityAnswer?: string
   ) => {
     setLoading(true);
     try {
@@ -564,6 +627,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      const cleanQuestion = securityQuestion ? securityQuestion.trim() : undefined;
+      const cleanAnswer = securityAnswer ? securityAnswer.trim().toLowerCase() : undefined;
+
       const userDoc: UserProfile = {
         uid: userUid,
         role: 'customer',
@@ -571,6 +637,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: cleanEmail,
         phone: phone.trim() || '+63 900 000 0000',
         accountStatus: 'APPROVED',
+        securityQuestion: cleanQuestion,
+        securityAnswer: cleanAnswer,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -611,7 +679,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     vehicleType: string = 'E-Shuttle Transit',
     vehicleInfo: string = 'Unassigned E-Shuttle',
     driverLicenseCardUrl?: string,
-    driverLicenseNumber?: string
+    driverLicenseNumber?: string,
+    securityQuestion?: string,
+    securityAnswer?: string
   ) => {
     setLoading(true);
     // Cache pending driver intent
@@ -656,6 +726,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      const cleanQuestion = securityQuestion ? securityQuestion.trim() : undefined;
+      const cleanAnswer = securityAnswer ? securityAnswer.trim().toLowerCase() : undefined;
+
       const driverDoc: DriverProfile = {
         uid: userUid,
         role: 'driver',
@@ -668,6 +741,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         vehicleInfo: vehicleInfo || 'Unassigned E-Shuttle',
         driverLicenseCardUrl: (driverLicenseCardUrl || '').trim(),
         driverLicenseNumber: (driverLicenseNumber || '').trim(),
+        securityQuestion: cleanQuestion,
+        securityAnswer: cleanAnswer,
         currentLocation: {
           latitude: 14.5547,
           longitude: 121.0244,
@@ -714,6 +789,147 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const findAccountByEmail = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Search in users collection
+    const usersQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+    const userSnap = await getDocs(usersQuery);
+    if (!userSnap.empty) {
+      const docSnap = userSnap.docs[0];
+      return {
+        id: docSnap.id,
+        collection: 'users' as const,
+        data: docSnap.data() as UserProfile,
+      };
+    }
+
+    // 2. Search in drivers collection
+    const driversQuery = query(collection(db, 'drivers'), where('email', '==', cleanEmail));
+    const driverSnap = await getDocs(driversQuery);
+    if (!driverSnap.empty) {
+      const docSnap = driverSnap.docs[0];
+      return {
+        id: docSnap.id,
+        collection: 'drivers' as const,
+        data: docSnap.data() as DriverProfile,
+      };
+    }
+
+    return null;
+  };
+
+  const getSecurityQuestionByEmail = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+    }
+
+    const account = await findAccountByEmail(cleanEmail);
+    if (!account) {
+      return {
+        userFound: false,
+        hasQuestion: false,
+      };
+    }
+
+    const data = account.data;
+    if (data.role === 'admin') {
+      throw new Error('Administrator accounts must use the official Administrator Portal security protocol.');
+    }
+
+    const hasQuestion = Boolean(data.securityQuestion && data.securityAnswer);
+    const rawPhone = data.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneEnding = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : undefined;
+
+    return {
+      userFound: true,
+      hasQuestion,
+      question: data.securityQuestion,
+      hasPhoneFallback: !hasQuestion && Boolean(data.phone),
+      phoneEnding,
+      role: data.role,
+    };
+  };
+
+  const verifySecurityAnswerAndResetPassword = async (
+    email: string,
+    answer: string,
+    phoneFallback?: string
+  ) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address with a domain (e.g., name@example.com).');
+    }
+
+    const account = await findAccountByEmail(cleanEmail);
+    if (!account) {
+      throw new Error('No registered account found with this email address.');
+    }
+
+    const data = account.data;
+    if (data.role === 'admin') {
+      throw new Error('Administrator accounts must use the official Administrator Portal security protocol.');
+    }
+
+    // Verify security question if set
+    if (data.securityQuestion && data.securityAnswer) {
+      const normalizedProvided = answer.trim().toLowerCase();
+      const normalizedStored = data.securityAnswer.trim().toLowerCase();
+      if (!normalizedProvided || normalizedProvided !== normalizedStored) {
+        throw new Error('Incorrect answer to the security question. Please check and try again.');
+      }
+    } else {
+      // Legacy account fallback: verify phone number
+      if (!phoneFallback) {
+        throw new Error('Verification required: please confirm your registered mobile number.');
+      }
+      const providedDigits = phoneFallback.replace(/\D/g, '');
+      const storedDigits = (data.phone || '').replace(/\D/g, '');
+      const matchesFull = providedDigits.length >= 7 && storedDigits.includes(providedDigits);
+      const matchesEnding = providedDigits.length >= 4 && storedDigits.endsWith(providedDigits);
+      if (!matchesFull && !matchesEnding) {
+        throw new Error('The mobile phone number provided does not match our account records. Please try again.');
+      }
+    }
+
+    // Dispatches Firebase password reset email safely
+    await sendPasswordResetEmail(auth, cleanEmail);
+
+    logActivity({
+      action: 'AUTH_FORGOT_PASSWORD',
+      actionLabel: 'Password Reset Dispatched',
+      entityType: 'AUTH',
+      entityId: account.id,
+      entityName: data.fullName || cleanEmail,
+      summary: `Password reset link dispatched to "${cleanEmail}" after identity verification`,
+      performedBy: { uid: account.id, name: data.fullName || 'User', email: cleanEmail, role: data.role },
+      severity: 'info',
+    }).catch(() => {});
+  };
+
+  const updateSecurityQuestion = async (question: string, answer: string) => {
+    if (!currentUser) throw new Error('You must be signed in to update your security question.');
+    const cleanQ = question.trim();
+    const cleanA = answer.trim();
+    if (!cleanQ) throw new Error('Please select a valid security question.');
+    if (!cleanA || cleanA.length < 2) throw new Error('Security answer must be at least 2 characters long.');
+
+    const targetCollection = role === 'driver' ? 'drivers' : 'users';
+    await updateDoc(doc(db, targetCollection, currentUser.uid), {
+      securityQuestion: cleanQ,
+      securityAnswer: cleanA.toLowerCase(),
+      updatedAt: serverTimestamp(),
+    });
+
+    if (role === 'driver') {
+      setDriverProfile((prev) => (prev ? { ...prev, securityQuestion: cleanQ, securityAnswer: cleanA.toLowerCase() } : null));
+    } else {
+      setUserProfile((prev) => (prev ? { ...prev, securityQuestion: cleanQ, securityAnswer: cleanA.toLowerCase() } : null));
+    }
+  };
+
   const resetPassword = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
@@ -731,6 +947,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('eshuttle_last_reg_role');
         localStorage.removeItem('eshuttle_pending_license_url');
         localStorage.removeItem('eshuttle_pending_license_num');
+        sessionStorage.removeItem('eshuttle_admin_auth_granted');
       } catch {}
       await firebaseSignOut(auth);
       setUserProfile(null);
@@ -786,6 +1003,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUpCustomer,
         signUpDriver,
         resetPassword,
+        getSecurityQuestionByEmail,
+        verifySecurityAnswerAndResetPassword,
+        updateSecurityQuestion,
         logout,
         refreshProfile,
       }}

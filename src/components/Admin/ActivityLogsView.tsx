@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { Component, useState, useEffect, useMemo } from 'react';
 import {
   ActivityLog,
   ActivityAction,
@@ -109,11 +109,13 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
       // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesSummary = log.summary.toLowerCase().includes(q);
-        const matchesEntity = log.entityName?.toLowerCase().includes(q) || false;
-        const matchesId = log.entityId?.toLowerCase().includes(q) || false;
-        const matchesActor = log.performedBy.name.toLowerCase().includes(q) || (log.performedBy.email?.toLowerCase().includes(q) ?? false);
-        const matchesAction = log.actionLabel.toLowerCase().includes(q);
+        const matchesSummary = (log.summary || '').toLowerCase().includes(q);
+        const matchesEntity = (log.entityName || '').toLowerCase().includes(q);
+        const matchesId = (log.entityId || '').toLowerCase().includes(q);
+        const actorName = log.performedBy?.name || '';
+        const actorEmail = log.performedBy?.email || '';
+        const matchesActor = actorName.toLowerCase().includes(q) || actorEmail.toLowerCase().includes(q);
+        const matchesAction = (log.actionLabel || '').toLowerCase().includes(q);
         return matchesSummary || matchesEntity || matchesId || matchesActor || matchesAction;
       }
 
@@ -492,8 +494,8 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap pt-0.5">
                           <span className="flex items-center gap-1">
                             <User className="w-3 h-3 text-slate-400" />
-                            <strong className="text-slate-700 font-semibold">{log.performedBy.name}</strong>
-                            {log.performedBy.role && (
+                            <strong className="text-slate-700 font-semibold">{log.performedBy?.name || 'System Dispatcher'}</strong>
+                            {log.performedBy?.role && (
                               <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
                                 {log.performedBy.role}
                               </span>
@@ -586,8 +588,8 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
 
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-500">Performed By</span>
-                  <div className="mt-0.5 font-bold text-slate-800 truncate" title={inspectingLog.performedBy.name}>
-                    {inspectingLog.performedBy.name} ({inspectingLog.performedBy.role || 'system'})
+                  <div className="mt-0.5 font-bold text-slate-800 truncate" title={inspectingLog.performedBy?.name || 'System'}>
+                    {inspectingLog.performedBy?.name || 'System Dispatcher'} ({inspectingLog.performedBy?.role || 'system'})
                   </div>
                 </div>
 
@@ -743,3 +745,66 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
     </div>
   );
 };
+
+interface ActivityLogsErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ActivityLogsErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ActivityLogsErrorBoundary extends Component<ActivityLogsErrorBoundaryProps, ActivityLogsErrorBoundaryState> {
+  override state: ActivityLogsErrorBoundaryState = {
+    hasError: false,
+    error: null,
+  };
+
+  constructor(props: ActivityLogsErrorBoundaryProps) {
+    super(props);
+  }
+
+  static getDerivedStateFromError(error: Error): ActivityLogsErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('ActivityLogsView boundary caught error:', error, info);
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-white border-2 border-rose-400 rounded-3xl shadow-sm text-center space-y-4 my-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 mx-auto flex items-center justify-center font-bold text-xl">
+            !
+          </div>
+          <div>
+            <h2 className="text-base font-black text-slate-800">Activity Logs Loading Issue</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              An error occurred while parsing the audit trail entries: {this.state.error?.message || 'Unknown error'}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+            }}
+            className="px-4 py-2 bg-[#0D47A1] text-white font-bold text-xs rounded-xl shadow hover:bg-blue-800 transition-colors"
+          >
+            Retry Logs View
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function SafeActivityLogsView(props: ActivityLogsViewProps) {
+  return (
+    <ActivityLogsErrorBoundary>
+      <ActivityLogsView {...props} />
+    </ActivityLogsErrorBoundary>
+  );
+}

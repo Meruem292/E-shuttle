@@ -8,7 +8,7 @@ export interface ActionDotsMap {
   [tabName: string]: boolean;
 }
 
-export function useActionBadges(currentUser: UserProfile | null, role: UserRole | null) {
+export function useActionBadges(currentUser: { uid?: string; phone?: string } | null | undefined, role: UserRole | null) {
   const [actionDots, setActionDots] = useState<ActionDotsMap>({});
 
   useEffect(() => {
