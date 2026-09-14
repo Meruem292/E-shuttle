@@ -84,12 +84,12 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
 
       if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
-        if (pin.length < 6) {
+        if (pin.length < 4) {
           const nextPin = pin + e.key;
           setPin(nextPin);
           setErrorMessage(null);
           // If typed 4 digits, auto verify
-          if (nextPin.length === pinLength) {
+          if (nextPin.length === 4) {
             handleVerify(nextPin);
           }
         }
@@ -101,11 +101,11 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
   }, [isOpen, pin, isVerifying, pinLength]);
 
   const handleKeyPress = (num: string) => {
-    if (isVerifying || pin.length >= 6) return;
+    if (isVerifying || pin.length >= 4) return;
     const nextPin = pin + num;
     setPin(nextPin);
     setErrorMessage(null);
-    if (nextPin.length === pinLength) {
+    if (nextPin.length === 4) {
       handleVerify(nextPin);
     }
   };
@@ -124,7 +124,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
 
   const handleVerify = async (pinToVerify = pin) => {
     if (pinToVerify.length < 4) {
-      setErrorMessage('Please enter at least 4 digits.');
+      setErrorMessage('Please enter your 4-digit Secret PIN.');
       return;
     }
 
@@ -166,11 +166,12 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
           type="tel"
           pattern="[0-9]*"
           inputMode="numeric"
+          maxLength={4}
           value={pin}
           onChange={(e) => {
-            const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+            const val = e.target.value.replace(/\D/g, '').slice(0, 4);
             setPin(val);
-            if (val.length === pinLength) {
+            if (val.length === 4) {
               handleVerify(val);
             }
           }}

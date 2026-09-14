@@ -132,10 +132,10 @@ export async function updateAdminActionPin(
   const cleanCurrent = (currentPin || '').trim();
   const cleanNew = (newPin || '').trim();
 
-  if (!/^\d{4,6}$/.test(cleanNew)) {
+  if (!/^\d{4}$/.test(cleanNew)) {
     return {
       success: false,
-      message: 'New Secret PIN must be 4 to 6 numeric digits (0-9 only).',
+      message: 'New Secret PIN must be exactly 4 numeric digits (0-9 only).',
     };
   }
 
@@ -156,7 +156,7 @@ export async function updateAdminActionPin(
       {
         isCustomPinSet: true,
         pinHash: newHash,
-        pinLength: cleanNew.length,
+        pinLength: 4,
         requirePinForDestructiveActions: true,
         updatedAt: serverTimestamp(),
         updatedBy: adminUser?.email || adminUser?.fullName || 'admin',
@@ -170,11 +170,11 @@ export async function updateAdminActionPin(
       entityType: 'SETTINGS',
       entityId: 'admin-action-pin',
       entityName: 'Admin Action Security PIN',
-      summary: `Administrator updated the Secret Action PIN (${cleanNew.length}-digit PIN protection active)`,
+      summary: `Administrator updated the Secret Action PIN (4-digit PIN protection active)`,
       details: {
         summary: 'Secret Action PIN updated in database for administrative authorization guard',
         metadata: {
-          pinLength: cleanNew.length,
+          pinLength: 4,
           isCustom: true,
         },
       },
@@ -189,7 +189,7 @@ export async function updateAdminActionPin(
 
     return {
       success: true,
-      message: `Secret Action PIN successfully updated (${cleanNew.length} digits). All critical admin actions will require this PIN.`,
+      message: `Secret Action PIN successfully updated (4 digits). All critical admin actions will require this PIN.`,
     };
   } catch (err: any) {
     console.error('Failed to update admin action PIN in Firestore:', err);

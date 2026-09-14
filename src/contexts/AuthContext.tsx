@@ -106,11 +106,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
 
   // 1. Sync auth state
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      setAuthInitialized(true);
       if (!user) {
         setUserProfile(null);
         setDriverProfile(null);
@@ -306,6 +308,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 2. Load user/driver profile and subscribe to updates
   useEffect(() => {
+    if (!authInitialized) {
+      return;
+    }
+
     if (!currentUser) {
       setUserProfile(null);
       setDriverProfile(null);

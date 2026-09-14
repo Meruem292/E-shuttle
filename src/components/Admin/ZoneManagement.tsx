@@ -6,6 +6,8 @@ import {
   addOperationalZone,
   updateOperationalZone,
   deleteOperationalZone,
+  getStationsForZone,
+  autoHealStationZoneRelations,
 } from '../../services/zoneService';
 import { listenToShuttleStations } from '../../services/stationService';
 import { subscribeToEBikes } from '../../services/ebikeService';
@@ -129,6 +131,13 @@ export const ZoneManagement: React.FC = () => {
     };
   }, []);
 
+  // Auto-heal relation between stations and zones when both lists are available
+  useEffect(() => {
+    if (zones.length > 0 && stations.length > 0) {
+      autoHealStationZoneRelations(stations, zones).catch(() => {});
+    }
+  }, [zones, stations]);
+
   // 2. Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -198,7 +207,8 @@ export const ZoneManagement: React.FC = () => {
       boundsPoints.push(pos);
 
       const isSelected = selectedZone?.id === zone.id;
-      const zoneStationsCount = stations.filter((s) => s.zoneId === zone.id).length;
+      const zoneStations = getStationsForZone(zone, stations);
+      const zoneStationsCount = zoneStations.length;
       const zoneBikesCount = ebikes.filter((b) => b.zoneId === zone.id).length;
 
       // Outer Geofence Circle
@@ -214,7 +224,6 @@ export const ZoneManagement: React.FC = () => {
       // Render Station Pins & 100m Fencing Circles ONLY for this Zone if no zone is selected OR if this is the selected zone
       const shouldRenderStationPins = !selectedZone || selectedZone.id === zone.id;
       if (shouldRenderStationPins) {
-        const zoneStations = stations.filter((s) => s.zoneId === zone.id && s.isActive !== false);
         zoneStations.forEach((st) => {
           if (!st.latitude || !st.longitude) return;
 
@@ -562,7 +571,7 @@ export const ZoneManagement: React.FC = () => {
             {filteredZones.map((zone, idx) => {
               const isSelected = selectedZone?.id === zone.id;
               const isActive = zone.isActive !== false;
-              const zoneStations = stations.filter((s) => s.zoneId === zone.id);
+              const zoneStations = getStationsForZone(zone, stations);
               const zoneBikes = ebikes.filter((b) => b.zoneId === zone.id);
               const zoneDrivers = drivers.filter((d) => d.zoneId === zone.id);
 

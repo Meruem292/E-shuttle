@@ -61,8 +61,8 @@ export const AdminPinSettingsCard: React.FC = () => {
       return;
     }
 
-    if (!/^\d{4,6}$/.test(newPin)) {
-      setErrorMsg('New Secret PIN must be 4 to 6 numeric digits.');
+    if (!/^\d{4}$/.test(newPin)) {
+      setErrorMsg('New Secret PIN must be exactly 4 numeric digits.');
       return;
     }
 
@@ -236,7 +236,7 @@ export const AdminPinSettingsCard: React.FC = () => {
                 type={showPins ? 'text' : 'password'}
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={4}
                 required
                 placeholder="Enter current PIN"
                 value={currentPin}
@@ -255,14 +255,14 @@ export const AdminPinSettingsCard: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#0D47A1]">New Secret PIN (4-6 digits)</label>
+              <label className="text-xs font-bold text-[#0D47A1]">New Secret PIN (4 digits)</label>
               <input
                 type={showPins ? 'text' : 'password'}
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={4}
                 required
-                placeholder="4-6 numeric digits"
+                placeholder="4 numeric digits"
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full bg-white border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:outline-none focus:border-[#1565C0] tracking-widest"
@@ -275,9 +275,9 @@ export const AdminPinSettingsCard: React.FC = () => {
                 type={showPins ? 'text' : 'password'}
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={4}
                 required
-                placeholder="Re-enter new PIN"
+                placeholder="Re-enter 4-digit PIN"
                 value={confirmNewPin}
                 onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full bg-white border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:outline-none focus:border-[#1565C0] tracking-widest"

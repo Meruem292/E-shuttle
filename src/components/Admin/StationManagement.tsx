@@ -7,6 +7,9 @@ import {
   updateShuttleStation,
   deleteShuttleStation,
   DEFAULT_STATION_RADIUS_METERS,
+  isStationInZone,
+  findZoneForStation,
+  autoHealStationZoneRelations,
 } from '../../services/stationService';
 import { listenToOperationalZones } from '../../services/zoneService';
 import {
@@ -126,6 +129,13 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
     };
   }, []);
 
+  // Auto-heal relation between stations and zones when both are loaded
+  useEffect(() => {
+    if (stations.length > 0 && zones.length > 0) {
+      autoHealStationZoneRelations(stations, zones).catch(() => {});
+    }
+  }, [stations, zones]);
+
   // 2. Initialize Leaflet Map with reliable gesture handling
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -237,6 +247,12 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
       }
     }
 
+    // Auto-detect zone from selected coordinates
+    const detectedZone = findZoneForStation({ latitude: lat, longitude: lng }, zones);
+    if (detectedZone) {
+      setFormZoneId(detectedZone.id);
+    }
+
     setIsPinningMode(false);
     setShowAddForm(true);
 
@@ -300,7 +316,10 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
       st.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (st.description && st.description.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesCat = categoryFilter === 'all' || st.category === categoryFilter;
-    const matchesZone = zoneFilter === 'all' || st.zoneId === zoneFilter;
+    const selectedFilterZone = zones.find((z) => z.id === zoneFilter);
+    const matchesZone =
+      zoneFilter === 'all' ||
+      (selectedFilterZone ? isStationInZone(st, selectedFilterZone) : st.zoneId === zoneFilter);
     return matchesSearch && matchesCat && matchesZone;
   });
 
@@ -504,7 +523,15 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
 
     const allowPickup = formAllowedType === 'both' || formAllowedType === 'pickup_only';
     const allowDropoff = formAllowedType === 'both' || formAllowedType === 'dropoff_only';
-    const selectedZoneObj = zones.find((z) => z.id === formZoneId);
+
+    // Auto-resolve zone if not explicitly set or if zone selection is empty
+    const detectedZone = findZoneForStation(
+      { latitude: lat, longitude: lng, zoneId: formZoneId || undefined },
+      zones
+    );
+    const finalZoneId = formZoneId || detectedZone?.id || undefined;
+    const selectedZoneObj = zones.find((z) => z.id === finalZoneId) || detectedZone;
+    const finalZoneName = selectedZoneObj?.name || undefined;
 
     setSubmitting(true);
     try {
@@ -519,8 +546,8 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
           allowedType: formAllowedType,
           allowPickup,
           allowDropoff,
-          zoneId: formZoneId || undefined,
-          zoneName: selectedZoneObj?.name || undefined,
+          zoneId: finalZoneId,
+          zoneName: finalZoneName,
           description: formDescription.trim(),
           isActive: formIsActive,
         });
@@ -538,8 +565,8 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
           allowedType: formAllowedType,
           allowPickup,
           allowDropoff,
-          zoneId: formZoneId || undefined,
-          zoneName: selectedZoneObj?.name || undefined,
+          zoneId: finalZoneId,
+          zoneName: finalZoneName,
           description: formDescription.trim(),
           isActive: formIsActive,
         });
@@ -830,6 +857,24 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
               <option value="building">Buildings</option>
               <option value="stop">Stops</option>
             </select>
+
+            {/* Re-link Zones & Stations Button */}
+            <button
+              onClick={async () => {
+                const healed = await autoHealStationZoneRelations(stations, zones);
+                const msg =
+                  healed > 0
+                    ? `Successfully re-linked ${healed} stations to their operational zones!`
+                    : 'All stations are actively connected to their operational zones.';
+                setNotification(msg);
+                toast.success(msg);
+              }}
+              title="Audit and automatically re-link all stations to their enclosing operational zones"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Re-link Zones</span>
+            </button>
           </div>
         </div>
 
@@ -893,13 +938,25 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
                     </div>
 
                     {/* Zone Badge */}
-                    {st.zoneName && (
-                      <div className="flex items-center gap-1">
-                        <span className="bg-[#E3F2FD] border border-[#0D47A1] text-[#0D47A1] text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase">
-                          📍 {st.zoneName}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const displayZoneName =
+                        st.zoneName ||
+                        zones.find((z) => z.id === st.zoneId)?.name ||
+                        findZoneForStation(st, zones)?.name;
+                      return displayZoneName ? (
+                        <div className="flex items-center gap-1">
+                          <span className="bg-[#E3F2FD] border border-[#0D47A1] text-[#0D47A1] text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                            📍 {displayZoneName}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="bg-amber-50 border border-amber-300 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                            ⚠️ Auto-Matching Zone
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* Coordinates & Proximity Info */}
                     <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#F8FAFC] p-2.5 rounded-xl border border-slate-200">

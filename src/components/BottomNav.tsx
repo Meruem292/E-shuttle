@@ -178,7 +178,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     // Dots are removed once the tab has been seen
     const showHomeDot = (actionDots.home || hasActiveBooking) && !seenTabs.home && activeTab !== 'home';
     const showHistoryDot = actionDots.history && !seenTabs.history && activeTab !== 'history';
-    const showNotificationDot = unreadNotifCount > 0 && !seenTabs.notifications;
     const showSupportDot = actionDots.support && !seenTabs.support && activeTab !== 'support';
     const showProfileDot = actionDots.profile && !seenTabs.profile && activeTab !== 'profile';
 
@@ -196,7 +195,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <MapPin className={`w-5 h-5 ${activeTab === 'home' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showHomeDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Home</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Home</span>
         </button>
 
         <button
@@ -211,20 +210,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <Clock className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showHistoryDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Activity</span>
-        </button>
-
-        {/* Bell Notification Button in Navbar */}
-        <button
-          onClick={handleNotificationsClick}
-          title="Notifications & Alerts"
-          className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-2xl transition-all text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold active:scale-95"
-        >
-          <div className="relative flex items-center justify-center">
-            <Bell className="w-5 h-5 text-[#0D47A1]/80" />
-            {showNotificationDot && <RedDot />}
-          </div>
-          <span className="text-[11px]">Alerts</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Activity</span>
         </button>
 
         <button
@@ -239,7 +225,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <MessageSquare className="w-5 h-5" />
             {showSupportDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Help</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Help</span>
         </button>
 
         <button
@@ -254,7 +240,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <User className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showProfileDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Profile</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Profile</span>
         </button>
       </div>
     );
@@ -263,7 +249,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   if (role === 'driver') {
     const showDriveDot = actionDots.home && !seenTabs.home && activeTab !== 'home';
     const showHistoryDot = actionDots.history && !seenTabs.history && activeTab !== 'history';
-    const showNotificationDot = unreadNotifCount > 0 && !seenTabs.notifications;
     const showSupportDot = actionDots.support && !seenTabs.support && activeTab !== 'support';
     const showProfileDot = actionDots.profile && !seenTabs.profile && activeTab !== 'profile';
 
@@ -281,7 +266,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <Navigation className={`w-5 h-5 ${activeTab === 'home' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showDriveDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Drive</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Drive</span>
         </button>
 
         <button
@@ -296,20 +281,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <History className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showHistoryDot && <RedDot />}
           </div>
-          <span className="text-[11px]">History</span>
-        </button>
-
-        {/* Bell Notification Button in Navbar */}
-        <button
-          onClick={handleNotificationsClick}
-          title="Notifications & Alerts"
-          className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-2xl transition-all text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold active:scale-95"
-        >
-          <div className="relative flex items-center justify-center">
-            <Bell className="w-5 h-5 text-[#0D47A1]/80" />
-            {showNotificationDot && <RedDot />}
-          </div>
-          <span className="text-[11px]">Alerts</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">History</span>
         </button>
 
         <button
@@ -324,7 +296,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <MessageSquare className="w-5 h-5" />
             {showSupportDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Chat</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Chat</span>
         </button>
 
         <button
@@ -339,7 +311,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <CreditCard className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showProfileDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Profile</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Profile</span>
         </button>
       </div>
     );
@@ -379,7 +351,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <LayoutDashboard className={`w-5 h-5 ${activeTab === 'dashboard' || activeTab === 'map' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showDashboardDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Overview</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Overview</span>
         </button>
 
         <button
@@ -395,7 +367,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <Route className={`w-5 h-5 ${isOperationsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showOperationsDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Operations</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Operations</span>
         </button>
 
         <button
@@ -411,7 +383,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <Users className={`w-5 h-5 ${isAccountsSafetyActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showAccountsSafetyDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Accounts</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Accounts</span>
         </button>
 
         <button
@@ -427,7 +399,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <Settings className={`w-5 h-5 ${isSettingsLogsActive ? 'text-white' : 'text-[#0D47A1]/70'}`} />
             {showSettingsLogsDot && <RedDot />}
           </div>
-          <span className="text-[11px]">Settings & Logs</span>
+          <span className="text-[10px] sm:text-xs tracking-tight">Settings & Logs</span>
         </button>
       </div>
     );

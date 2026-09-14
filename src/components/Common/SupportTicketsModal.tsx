@@ -136,8 +136,6 @@ export const SupportTicketsModal: React.FC<SupportTicketsModalProps> = ({
     return () => unsub();
   }, [activeTicket?.channelId, currentUserId, currentUserRole, isOpen]);
 
-  if (!isOpen) return null;
-
   // Filtered Tickets List
   const filteredTickets = tickets.filter((t) => {
     const matchesStatus =
@@ -328,6 +326,8 @@ export const SupportTicketsModal: React.FC<SupportTicketsModalProps> = ({
     15,
     'support-tickets-modal'
   );
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in select-none">

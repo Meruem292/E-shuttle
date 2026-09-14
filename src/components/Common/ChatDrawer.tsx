@@ -136,8 +136,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     }
   }, [messages.length]);
 
-  if (!isOpen) return null;
-
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   // Handle Send Message
@@ -202,6 +200,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     15,
     'chat-drawer'
   );
+
+  if (!isOpen) return null;
 
   return (
     <>

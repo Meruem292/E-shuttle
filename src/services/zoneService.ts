@@ -14,9 +14,17 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { OperationalZone } from '../types';
+import { OperationalZone, ShuttleStation } from '../types';
 import { calculateDistanceKm } from '../constants/fare';
 import { logActivity } from './activityLogService';
+import {
+  isStationInZone,
+  getStationsForZone,
+  findZoneForStation,
+  autoHealStationZoneRelations,
+} from './zoneStationRelation';
+
+export { isStationInZone, getStationsForZone, findZoneForStation, autoHealStationZoneRelations };
 
 export const ZONES_COLLECTION = 'operational_zones';
 const LOCAL_STORAGE_ZONES_KEY = 'eshuttle_operational_zones_cache';
@@ -341,8 +349,6 @@ export async function deleteOperationalZone(id: string, nameHint?: string): Prom
   notifyLocalZoneSubscribers();
 }
 
-import { ShuttleStation } from '../types';
-
 /**
  * Validates if a user's GPS coordinates are within a zone's operational boundary radius.
  * Geofencing starts with the station pins registered under that zone (e.g. 100m catchment from pins).
@@ -353,7 +359,7 @@ export function checkLocationWithinZone(
   zone: OperationalZone,
   stations: ShuttleStation[] = []
 ): { isWithinZone: boolean; distanceMeters: number; nearestStation?: ShuttleStation | null } {
-  const zonePins = stations.filter((s) => s.zoneId === zone.id && s.isActive !== false);
+  const zonePins = getStationsForZone(zone, stations);
 
   if (zonePins.length > 0) {
     let minPinDist = Infinity;

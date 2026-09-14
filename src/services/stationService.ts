@@ -11,8 +11,16 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { ShuttleStation } from '../types';
+import { ShuttleStation, OperationalZone } from '../types';
 import { logActivity } from './activityLogService';
+import {
+  isStationInZone,
+  getStationsForZone,
+  findZoneForStation,
+  autoHealStationZoneRelations,
+} from './zoneStationRelation';
+
+export { isStationInZone, getStationsForZone, findZoneForStation, autoHealStationZoneRelations };
 
 export const STATIONS_COLLECTION = 'shuttleStations';
 export const DEFAULT_STATION_RADIUS_METERS = 100; // 100m catchment / tagging radius from station pins
@@ -237,8 +245,31 @@ export async function getShuttleStations(): Promise<ShuttleStation[]> {
 export async function addShuttleStation(
   station: Omit<ShuttleStation, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> {
+  let resolvedZoneId = station.zoneId;
+  let resolvedZoneName = station.zoneName;
+
+  // If zone is unassigned, try to auto-resolve using local cached zones
+  if (!resolvedZoneId) {
+    try {
+      const rawZones = localStorage.getItem('eshuttle_operational_zones_cache');
+      if (rawZones) {
+        const cachedZones: OperationalZone[] = JSON.parse(rawZones);
+        const autoZone = findZoneForStation(
+          { latitude: station.latitude, longitude: station.longitude },
+          cachedZones
+        );
+        if (autoZone) {
+          resolvedZoneId = autoZone.id;
+          resolvedZoneName = autoZone.name;
+        }
+      }
+    } catch {}
+  }
+
   const newStationData = {
     ...station,
+    zoneId: resolvedZoneId || undefined,
+    zoneName: resolvedZoneName || undefined,
     radiusMeters: station.radiusMeters || DEFAULT_STATION_RADIUS_METERS,
     isActive: station.isActive ?? true,
     allowedType: station.allowedType || 'both',
@@ -280,7 +311,7 @@ export async function addShuttleStation(
     entityName: newStationData.name,
     summary: `Created designated shuttle station "${newStationData.name}" (${newStationData.allowedType}) with ${newStationData.radiusMeters}m geofence`,
     details: {
-      summary: `Designated shuttle station added at coordinates [${newStationData.latitude}, ${newStationData.longitude}]`,
+      summary: `Designated shuttle station added at coordinates [${newStationData.latitude}, ${newStationData.longitude}] in zone ${resolvedZoneName || 'General'}`,
       after: newStationData,
     },
     severity: 'success',
@@ -299,10 +330,36 @@ export async function updateShuttleStation(
   const localList = getLocalStations();
   const existing = localList.find((st) => st.id === id);
 
+  let resolvedZoneId = updates.zoneId !== undefined ? updates.zoneId : existing?.zoneId;
+  let resolvedZoneName = updates.zoneName !== undefined ? updates.zoneName : existing?.zoneName;
+
+  // If coordinates changed or zone is missing, auto-detect
+  const lat = updates.latitude !== undefined ? updates.latitude : existing?.latitude;
+  const lng = updates.longitude !== undefined ? updates.longitude : existing?.longitude;
+
+  if (!resolvedZoneId && lat !== undefined && lng !== undefined) {
+    try {
+      const rawZones = localStorage.getItem('eshuttle_operational_zones_cache');
+      if (rawZones) {
+        const cachedZones: OperationalZone[] = JSON.parse(rawZones);
+        const autoZone = findZoneForStation({ latitude: lat, longitude: lng }, cachedZones);
+        if (autoZone) {
+          resolvedZoneId = autoZone.id;
+          resolvedZoneName = autoZone.name;
+        }
+      }
+    } catch {}
+  }
+
+  const finalUpdates = {
+    ...updates,
+    ...(resolvedZoneId ? { zoneId: resolvedZoneId, zoneName: resolvedZoneName } : {}),
+  };
+
   try {
     const stationRef = doc(db, STATIONS_COLLECTION, id);
     await updateDoc(stationRef, {
-      ...updates,
+      ...finalUpdates,
       updatedAt: serverTimestamp(),
     });
   } catch (err) {
@@ -310,7 +367,7 @@ export async function updateShuttleStation(
   }
 
   // Update local cache & notify
-  const updatedList = localList.map((st) => (st.id === id ? { ...st, ...updates } : st));
+  const updatedList = localList.map((st) => (st.id === id ? { ...st, ...finalUpdates } : st));
   saveLocalStations(updatedList);
   notifyLocalSubscribers();
 
@@ -325,7 +382,7 @@ export async function updateShuttleStation(
     details: {
       summary: `Station modified with fields: ${Object.keys(updates).join(', ')}`,
       before: existing ? { ...existing } : null,
-      after: updates,
+      after: finalUpdates,
     },
     severity: 'info',
   }).catch(() => {});
