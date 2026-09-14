@@ -340,7 +340,7 @@ export async function sendChatMessage(
         lastMessageTime: serverTimestamp(),
         unreadCounts: { [senderId]: 0, admin: senderRole === 'admin' ? 0 : 1 },
         title: senderRole === 'admin' ? 'Customer Support' : `${senderName} Support`,
-        subtitle: '2-Way Live Support',
+        subtitle: 'Secure Admin Dispatch & Investigation',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

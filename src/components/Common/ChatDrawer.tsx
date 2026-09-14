@@ -296,7 +296,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 {/* Channel Security Banner */}
                 <div className="bg-[#E3F2FD] border border-[#0D47A1]/20 rounded-2xl p-2.5 text-center text-[10px] font-bold text-[#0D47A1] flex items-center justify-center gap-1.5 shadow-sm">
                   <Sparkles className="w-3.5 h-3.5 text-[#0D47A1]" />
-                  <span>Direct 2-Way Channel between Passenger & Driver</span>
+                  <span>Secure Support & Investigation Channel with Admin</span>
                 </div>
 
                 {deduplicateMessages(messages).length === 0 ? (

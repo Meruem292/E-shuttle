@@ -56,11 +56,16 @@ import {
   PickupNotificationData,
 } from '../Common/PickupNotificationBanner';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
+import { SuspendedAccountPortal } from '../Common/SuspendedAccountPortal';
 
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
   const toast = useToast();
+
+  if (userProfile?.accountStatus === 'SUSPENDED') {
+    return <SuspendedAccountPortal />;
+  }
 
   // Step management: 'select_zone' (Initial Page) | 'booking' (Stations & Request)
   const [bookingStep, setBookingStep] = useState<'select_zone' | 'booking'>('select_zone');

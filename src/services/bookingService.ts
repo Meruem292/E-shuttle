@@ -41,6 +41,25 @@ export async function createBooking(
   zoneId?: string | null,
   zoneName?: string | null
 ): Promise<string> {
+  // 0. Check User Account Suspension Status
+  try {
+    const userSnap = await getDoc(doc(db, 'users', customerId));
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.accountStatus === 'SUSPENDED') {
+        const suspendedUntil = userData.suspendedUntil;
+        if (!suspendedUntil || Date.now() < suspendedUntil) {
+          const untilStr = suspendedUntil ? new Date(suspendedUntil).toLocaleString() : 'further notice (Permanent)';
+          throw new Error(`Your account is suspended until ${untilStr}. You cannot book a ride while under suspension.`);
+        }
+      }
+    }
+  } catch (suspendErr: any) {
+    if (suspendErr.message && suspendErr.message.includes('suspended until')) {
+      throw suspendErr;
+    }
+  }
+
   // 1. Proximity Geofence Verification: Verify pickup and destination are within allowed radius of designated stations
   try {
     const stations = await getShuttleStations();
@@ -183,6 +202,13 @@ export async function acceptBookingAtomic(
       throw new Error('Driver account not found.');
     }
     const driverData = driverDoc.data();
+    if (driverData.accountStatus === 'SUSPENDED') {
+      const suspendedUntil = driverData.suspendedUntil;
+      if (!suspendedUntil || Date.now() < suspendedUntil) {
+        const untilStr = suspendedUntil ? new Date(suspendedUntil).toLocaleString() : 'further notice (Permanent)';
+        throw new Error(`Your driver account is suspended until ${untilStr}. You cannot receive or accept bookings while suspended.`);
+      }
+    }
     if (driverData.accountStatus !== 'APPROVED') {
       throw new Error('Your driver account is not approved.');
     }

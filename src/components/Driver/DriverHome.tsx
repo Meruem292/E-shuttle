@@ -40,11 +40,16 @@ import {
   PickupNotificationData,
 } from '../Common/PickupNotificationBanner';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
+import { SuspendedAccountPortal } from '../Common/SuspendedAccountPortal';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
   const toast = useToast();
+
+  if (driverProfile?.accountStatus === 'SUSPENDED') {
+    return <SuspendedAccountPortal />;
+  }
 
   const [availability, setAvailability] = useState<DriverAvailability>(
     driverProfile?.availability || 'OFFLINE'

@@ -41,6 +41,7 @@ export interface UserProfile {
   phone: string;
   photoURL?: string;
   accountStatus: AccountStatus;
+  suspendedUntil?: number | null;
   securityQuestion?: string;
   securityAnswer?: string;
   createdAt: any;
@@ -55,6 +56,7 @@ export interface DriverProfile {
   phone: string;
   photoURL?: string;
   accountStatus: AccountStatus;
+  suspendedUntil?: number | null;
   availability: DriverAvailability;
   vehicleType: string; // e.g., "E-Shuttle Transit"
   vehicleInfo: string; // e.g., "EcoGlide-X (Plate #EB-9042)"
