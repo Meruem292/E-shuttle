@@ -69,6 +69,7 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
   const [rfidInput, setRfidInput] = useState('');
   const [pairingLoading, setPairingLoading] = useState(false);
   const [pairSuccess, setPairSuccess] = useState('');
+  const [showTipExplanation, setShowTipExplanation] = useState(false);
 
   // Native back handlers
   useBackHandler(
@@ -917,12 +918,22 @@ void sendRfidTapToFirebase(String rfidUid) {
 
             {/* Instruction Tip */}
             <div className="p-3 bg-[#E3F2FD] border border-[#0D47A1]/40 rounded-2xl text-[11px] text-[#0D47A1] space-y-1">
-              <div className="font-bold text-[#0D47A1] flex items-center gap-1">
-                <span>💡 Rapid Registration Tip:</span>
+              <div className="font-bold text-[#0D47A1] flex items-center justify-between">
+                <span className="flex items-center gap-1">💡 Rapid Registration Tip</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTipExplanation(!showTipExplanation)}
+                  title="Explain tip"
+                  className="w-5 h-5 rounded-full bg-white text-[#0D47A1] font-black text-[11px] flex items-center justify-center border border-[#0D47A1]/40 hover:bg-[#0D47A1] hover:text-white transition-all shadow-xs"
+                >
+                  ?
+                </button>
               </div>
-              <p className="text-slate-600 text-[10px] leading-relaxed font-medium">
-                Press the physical Push-Button (GPIO 4) on <strong>ANY ESP32 device</strong> to put it into <strong>Admin Registration Mode</strong>. Swipe driver cards on the reader to instantly populate card UIDs here without binding to the e-shuttle!
-              </p>
+              {showTipExplanation && (
+                <p className="text-slate-600 text-[10px] leading-relaxed font-medium pt-1 animate-in fade-in duration-200">
+                  Press the physical Push-Button (GPIO 4) on <strong>ANY ESP32 device</strong> to put it into <strong>Admin Registration Mode</strong>. Swipe driver cards on the reader to instantly populate card UIDs here without binding to the e-shuttle!
+                </p>
+              )}
             </div>
 
             {selectedDriverForRfid && (

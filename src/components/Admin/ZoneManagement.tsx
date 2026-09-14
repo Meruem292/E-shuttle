@@ -62,6 +62,7 @@ export const ZoneManagement: React.FC = () => {
   const [isPinningMode, setIsPinningMode] = useState<boolean>(false);
   const [formSaving, setFormSaving] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showExplanation, setShowExplanation] = useState<boolean>(false);
 
   // Delete modal state
   const [zoneToDelete, setZoneToDelete] = useState<OperationalZone | null>(null);
@@ -466,10 +467,19 @@ export const ZoneManagement: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 bg-[#0D47A1] rounded-full animate-pulse shrink-0" />
             <h1 className="text-lg font-black text-[#0D47A1]">Service Area Zones Management</h1>
+            <button
+              onClick={() => setShowExplanation(!showExplanation)}
+              title="Explain this page"
+              className="w-5 h-5 rounded-full bg-[#E3F2FD] text-[#0D47A1] font-black text-[11px] flex items-center justify-center border border-[#0D47A1]/40 hover:bg-[#0D47A1] hover:text-white transition-all shadow-xs"
+            >
+              ?
+            </button>
           </div>
-          <p className="text-xs text-slate-600 font-medium mt-1">
-            Register and isolate distinct operational territories (e.g., <span className="font-bold text-[#0D47A1]">Tagaytay City Hall Complex</span> & <span className="font-bold text-[#0D47A1]">Tagaytay City National High School</span>). Shuttles, station pins, and drivers are restricted strictly within their assigned zone.
-          </p>
+          {showExplanation && (
+            <p className="text-xs text-slate-600 font-medium mt-2 animate-in fade-in duration-200 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+              Register and isolate distinct operational territories (e.g., <span className="font-bold text-[#0D47A1]">Tagaytay City Hall Complex</span> & <span className="font-bold text-[#0D47A1]">Tagaytay City National High School</span>). Shuttles, station pins, and drivers are restricted strictly within their assigned zone.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

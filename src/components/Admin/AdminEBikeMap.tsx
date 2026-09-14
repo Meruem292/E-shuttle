@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { EBikeDevice, DriverProfile, ShuttleStation } from '../../types';
+import { EBikeDevice, DriverProfile, ShuttleStation, OperationalZone } from '../../types';
 import { subscribeToEBikes } from '../../services/ebikeService';
 import { listenToShuttleStations, DEFAULT_STATION_RADIUS_METERS } from '../../services/stationService';
+import { listenToOperationalZones, findNearestZone } from '../../services/zoneService';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import {
   Bike,
@@ -40,6 +41,7 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
   const [ebikes, setEbikes] = useState<EBikeDevice[]>(propEbikes || []);
   const [drivers, setDrivers] = useState<DriverProfile[]>(propDrivers || []);
   const [stations, setStations] = useState<ShuttleStation[]>([]);
+  const [zones, setZones] = useState<OperationalZone[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<EBikeDevice | null>(null);
 
   // Native back handler for device detail bottom sheet/card
@@ -55,6 +57,7 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
 
   // Filters & Search
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'IN_USE' | 'AVAILABLE' | 'MAINTENANCE'>('ALL');
+  const [filterZoneId, setFilterZoneId] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Synchronize from props or Firestore subscription
@@ -66,6 +69,24 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
       return () => unsubBikes();
     }
   }, [propEbikes]);
+
+  useEffect(() => {
+    const unsubZones = listenToOperationalZones((zList) => setZones(zList));
+    return () => unsubZones();
+  }, []);
+
+  const getBikeZoneName = (bike: EBikeDevice): string => {
+    if (bike.zoneName) return bike.zoneName;
+    if (bike.zoneId) {
+      const found = zones.find((z) => z.id === bike.zoneId);
+      if (found) return found.name;
+    }
+    if (bike.location?.latitude && bike.location?.longitude && zones.length > 0) {
+      const nearest = findNearestZone(bike.location.latitude, bike.location.longitude, zones, stations);
+      if (nearest.nearestZone) return nearest.nearestZone.name;
+    }
+    return 'General Zone';
+  };
 
   useEffect(() => {
     if (propDrivers) {
@@ -139,7 +160,7 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
     };
   }, []);
 
-  // Filter E-Bikes based on search query & status
+  // Filter E-Bikes based on search query, status & zone
   const filteredEbikes = ebikes.filter((bike) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -150,6 +171,14 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
       bike.lastRfidCardUid?.toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
+
+    if (filterZoneId !== 'ALL') {
+      const zoneName = getBikeZoneName(bike);
+      const matchedZone = zones.find((z) => z.id === filterZoneId);
+      const matchesId = bike.zoneId === filterZoneId;
+      const matchesName = matchedZone && (bike.zoneName === matchedZone.name || zoneName === matchedZone.name);
+      if (!matchesId && !matchesName) return false;
+    }
 
     if (filterStatus === 'IN_USE') return bike.status === 'IN_USE' || !!bike.currentDriverId;
     if (filterStatus === 'AVAILABLE') return bike.status === 'AVAILABLE' && !bike.currentDriverId;
@@ -249,6 +278,7 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
               bike.currentDriverId ? 'text-[#2196F3]' : 'text-slate-600'
             }">${bike.currentDriverId ? 'IN USE' : bike.status}</span></p>
             <p><b>Active Driver:</b> ${driverName}</p>
+            <p><b>Operating Zone:</b> <span class="text-[#0D47A1] font-bold">${getBikeZoneName(bike)}</span></p>
             <p><b>Live Speed:</b> ${bike.speedKmH ? bike.speedKmH.toFixed(1) : '0.0'} km/h</p>
             <p><b>Last RFID Tag:</b> <code class="font-mono bg-[#E3F2FD] text-[#0D47A1] px-1 py-0.5 rounded">${
               bike.lastRfidCardUid || 'None'
@@ -420,6 +450,20 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
               Maintenance ({maintenanceCount})
             </button>
           )}
+
+          {zones.length > 0 && (
+            <select
+              value={filterZoneId}
+              onChange={(e) => setFilterZoneId(e.target.value)}
+              className="bg-white border-2 border-[#0D47A1] text-[#0D47A1] text-[10px] font-bold rounded-xl px-2.5 py-1 focus:outline-none focus:border-[#1565C0] shrink-0"
+              title="Filter by Operational Zone"
+            >
+              <option value="ALL">All Zones ({zones.length})</option>
+              {zones.map((z) => (
+                <option key={z.id} value={z.id}>{z.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Search Bar & Station Shortcut */}
@@ -539,6 +583,14 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
                 <div className="font-bold text-[#0D47A1] text-xs flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-[#0D47A1]" />
                   <span>{selectedDevice.currentDriverName || 'No Driver Assigned'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[9px] text-slate-500 font-bold uppercase">Operating Zone</span>
+                <div className="font-bold text-[#0D47A1] text-xs flex items-center gap-1.5">
+                  <Landmark className="w-3.5 h-3.5 text-[#0D47A1]" />
+                  <span>{getBikeZoneName(selectedDevice)}</span>
                 </div>
               </div>
 

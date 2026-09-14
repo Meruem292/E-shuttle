@@ -126,6 +126,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
   const [profileEmail, setProfileEmail] = useState<string>('');
   const [profileUsername, setProfileUsername] = useState<string>('');
   const [profilePhone, setProfilePhone] = useState<string>('');
+  const [showHeaderInfo, setShowHeaderInfo] = useState<boolean>(false);
   const [profileSaving, setProfileSaving] = useState<boolean>(false);
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -1309,14 +1310,14 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
       case 'dashboard':
       case 'map':
         return {
-          title: 'Admin Control Panel',
+          title: 'Dashboard',
           badge: 'OVERVIEW',
           subtitle: 'Real-time e-shuttle monitoring, pickup alerts, and trip management',
         };
       case 'logs':
       case 'audit':
         return {
-          title: 'System Activity & Audit Logs',
+          title: 'Logs',
           badge: 'AUDIT TRAIL',
           subtitle: 'Real-time tracking of all CRUD events, state changes, and operations for backtracking',
         };
@@ -1324,49 +1325,50 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
       case 'customers':
       case 'drivers':
         return {
-          title: `Users & Driver Accounts (${customersOnly.length + drivers.length})`,
+          title: 'Users',
           badge: 'DIRECTORY',
           subtitle: 'Unified account directory for passengers, shuttle drivers, approvals, and RFID access',
         };
       case 'zones':
         return {
-          title: `Geofence Service Zones (${zones.length})`,
+          title: 'Zones',
           badge: 'COVERAGE',
           subtitle: 'Configure operational boundaries, active perimeters, and service coverage zones',
         };
       case 'stations':
         return {
-          title: 'Shuttle Stations & Stop Pinning',
+          title: 'Stations',
           badge: 'STATIONS',
           subtitle: 'Manage designated pick-up & drop-off station locations and catchments',
         };
       case 'rides':
         return {
-          title: `Trip Dispatch History (${allBookings.length})`,
+          title: 'Trips',
           badge: 'TRANSIT LOG',
           subtitle: 'Complete record of ongoing, completed, and cancelled transit trips',
         };
       case 'ebikes':
         return {
-          title: 'E-Shuttle Fleet & Telemetry',
+          title: 'Fleet',
           badge: 'FLEET',
           subtitle: 'Monitor vehicle status, operational readiness, maintenance, and GPS tracking',
         };
       case 'incidents':
         return {
-          title: `Incidents & Support Tickets (${incidentTickets.length})`,
+          title: 'Incidents',
           badge: 'SAFETY & DISPATCH',
           subtitle: 'Passenger & driver safety reports, breakdowns, and 2-way dispatch support',
         };
       case 'settings':
         return {
-          title: 'Dispatch System Settings',
+          title: 'Settings',
           badge: 'CONFIG',
           subtitle: 'Configure driver search radius, system defaults, and operational parameters (Free Public Shuttle)',
         };
+      case 'default':
       default:
         return {
-          title: 'Admin Control Panel',
+          title: 'Dashboard',
           badge: 'ADMIN',
           subtitle: 'Manage users, drivers, e-shuttles & pick-up dispatch',
         };
@@ -1388,14 +1390,24 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             alt="E-Shuttle Official Logo"
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
           />
-          <div>
-            <h1 className="text-lg sm:text-2xl font-black text-[#0D47A1] flex items-center gap-2">
-              <span>{pageHeader.title}</span>
-              <span className="text-[10px] font-black bg-[#0D47A1] text-white border border-[#0D47A1] px-2 py-0.5 rounded-full uppercase hidden sm:inline-block shadow-sm">
-                {pageHeader.badge}
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">{pageHeader.subtitle}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="text-sm sm:text-base font-black text-[#0D47A1] whitespace-nowrap">
+                {pageHeader.title}
+              </h1>
+              <button
+                onClick={() => setShowHeaderInfo(!showHeaderInfo)}
+                title="Explain this page"
+                className="w-4 h-4 rounded-full bg-white text-[#0D47A1] font-black text-[10px] flex items-center justify-center border border-[#0D47A1]/40 hover:bg-[#0D47A1] hover:text-white transition-all shadow-xs shrink-0"
+              >
+                ?
+              </button>
+            </div>
+            {showHeaderInfo && (
+              <p className="text-xs text-slate-600 font-medium mt-1.5 animate-in fade-in duration-200 bg-white p-2.5 rounded-2xl border border-[#0D47A1]/20 shadow-sm max-w-lg">
+                {pageHeader.subtitle}
+              </p>
+            )}
           </div>
         </div>
 

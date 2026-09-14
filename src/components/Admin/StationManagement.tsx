@@ -73,6 +73,7 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [showExplanation, setShowExplanation] = useState<boolean>(false);
 
   // Map Container
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -647,10 +648,19 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
               <MapPin className="w-5 h-5" />
             </div>
             <h2 className="text-lg font-black text-[#0D47A1]">Designated Station Pins & Geofencing</h2>
+            <button
+              onClick={() => setShowExplanation(!showExplanation)}
+              title="Explain this page"
+              className="w-5 h-5 rounded-full bg-[#E3F2FD] text-[#0D47A1] font-black text-[11px] flex items-center justify-center border border-[#0D47A1]/40 hover:bg-[#0D47A1] hover:text-white transition-all shadow-xs"
+            >
+              ?
+            </button>
           </div>
-          <p className="text-xs text-slate-600 font-medium mt-1">
-            E-Shuttles strictly operate between designated pinned stations. Customers can only tag these pins for pick-up and drop-off. If a customer is outside the allowed proximity radius, booking is automatically restricted.
-          </p>
+          {showExplanation && (
+            <p className="text-xs text-slate-600 font-medium mt-2 animate-in fade-in duration-200 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+              E-Shuttles strictly operate between designated pinned stations. Customers can only tag these pins for pick-up and drop-off. If a customer is outside the allowed proximity radius, booking is automatically restricted.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
