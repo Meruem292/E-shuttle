@@ -32,6 +32,7 @@ import {
 import { LocationPickerMap } from '../Common/LocationPickerMap';
 import { useAdminPin } from '../../contexts/AdminPinContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useBackHandler } from '../../contexts/NativeBackContext';
 
 export const ZoneManagement: React.FC = () => {
   const { promptAdminPin } = useAdminPin();
@@ -63,6 +64,37 @@ export const ZoneManagement: React.FC = () => {
   // Delete modal state
   const [zoneToDelete, setZoneToDelete] = useState<OperationalZone | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Native mobile back button handlers
+  useBackHandler(
+    Boolean(zoneToDelete),
+    () => {
+      setZoneToDelete(null);
+      return true;
+    },
+    30,
+    'zone-delete-modal'
+  );
+
+  useBackHandler(
+    showAddModal && formStep === 2,
+    () => {
+      setFormStep(1);
+      return true;
+    },
+    25,
+    'zone-form-step'
+  );
+
+  useBackHandler(
+    showAddModal && formStep === 1,
+    () => {
+      setShowAddModal(false);
+      return true;
+    },
+    20,
+    'zone-form-modal'
+  );
 
   // Map references
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -839,7 +871,7 @@ export const ZoneManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFormStep(1)}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+                      className="hidden sm:inline-flex px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold items-center gap-1 transition-colors"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                       <span>Back</span>

@@ -18,6 +18,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBackHandler } from '../../contexts/NativeBackContext';
 import {
   ChatChannel,
   ChatMessage,
@@ -43,6 +44,7 @@ interface ChatDrawerProps {
   initialTargetUser?: { id: string; name: string; role: 'customer' | 'driver' | 'admin' };
   initialBookingId?: string;
   initialChannelType?: ChatChannelType;
+  onOpenSupportTickets?: () => void;
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({
@@ -52,13 +54,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   initialTargetUser,
   initialBookingId,
   initialChannelType,
+  onOpenSupportTickets,
 }) => {
   const { currentUser, userProfile, driverProfile, role } = useAuth();
 
   const currentUserId = role === 'admin' ? 'admin' : (currentUser?.uid || '');
   const currentUserName =
     role === 'admin'
-      ? 'E-Shuttle Admin Support'
+      ? 'E-Shuttle Admin'
       : role === 'driver'
       ? driverProfile?.fullName || 'E-Shuttle Driver'
       : userProfile?.fullName || 'Valued Passenger';
@@ -66,18 +69,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   // Navigation State
   const [channels, setChannels] = useState<ChatChannel[]>([]);
-  const [tickets, setTickets] = useState<IncidentTicket[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(initialChannelId || null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [sending, setSending] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterTab, setFilterTab] = useState<'all' | 'tickets' | 'support' | 'direct'>('all');
-  const [showReportModal, setShowReportModal] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Handle auto-opening direct channels when target user is provided or auto-create support channel for customers/drivers
+  // 1. Handle auto-opening direct channels when target user is provided
   useEffect(() => {
     if (!isOpen) return;
 
@@ -93,18 +93,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       ).then((cid) => {
         setActiveChannelId(cid);
       });
-    } else if (currentUserRole !== 'admin' && currentUserId) {
-      // Auto-ensure user/driver support channel exists in Firestore as soon as drawer is opened
-      const ctype: ChatChannelType = currentUserRole === 'driver' ? 'driver_admin' : 'user_admin';
-      getOrCreateChannel(
-        ctype,
-        { id: currentUserId, name: currentUserName, role: currentUserRole },
-        { id: 'admin', name: 'E-Shuttle Admin Support', role: 'admin' }
-      ).then((cid) => {
-        if (!activeChannelId) {
-          setActiveChannelId(cid);
-        }
-      });
     }
   }, [isOpen, initialChannelId, initialTargetUser, initialChannelType, initialBookingId, currentUserRole, currentUserId, currentUserName]);
 
@@ -113,16 +101,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     if (!currentUserId || !isOpen) return;
 
     const unsubChannels = subscribeToUserChannels(currentUserId, currentUserRole, (chans) => {
+      // Filter out auto-generated support channels if user is viewing ride chats
       setChannels(chans);
-    });
-
-    const unsubTickets = subscribeToTickets(currentUserId, currentUserRole, (tList) => {
-      setTickets(tList);
     });
 
     return () => {
       unsubChannels();
-      unsubTickets();
     };
   }, [currentUserId, currentUserRole, isOpen]);
 
@@ -156,26 +140,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
-  // Handle Quick Start Support Chat with Admin
-  const handleStartAdminSupport = async () => {
-    if (currentUserRole === 'admin') {
-      setFilterTab('support');
-      return;
-    }
-    const adminTarget = {
-      id: 'admin',
-      name: 'E-Shuttle Admin Support',
-      role: 'admin' as const,
-    };
-    const ctype: ChatChannelType = currentUserRole === 'driver' ? 'driver_admin' : 'user_admin';
-    const cid = await getOrCreateChannel(
-      ctype,
-      { id: currentUserId, name: currentUserName, role: currentUserRole },
-      adminTarget
-    );
-    setActiveChannelId(cid);
-  };
-
   // Handle Send Message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) {
@@ -206,74 +170,83 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   // Quick suggestion chips based on user role
   const quickChips =
     currentUserRole === 'driver'
-      ? ['On my way to pickup station', 'Arrived at pickup location', 'Traffic delay ahead', 'Need dispatch help']
+      ? ['On my way to pickup station', 'Arrived at pickup location', 'Traffic delay ahead', 'Please come to the stop']
       : currentUserRole === 'customer'
       ? ["Where is my shuttle?", "I'm waiting at the station", 'Can you wait 2 mins?', 'Thank you!']
-      : ['Please stand by', 'Checking shuttle location now', 'Resolved, thank you!'];
+      : ['Please stand by', 'Checking shuttle location now', 'Updated ride status'];
 
   // Filter channels
   const filteredChannels = channels.filter((c) => {
     const titleMatch = (c.title || '').toLowerCase().includes(searchQuery.toLowerCase());
     const msgMatch = (c.lastMessage || '').toLowerCase().includes(searchQuery.toLowerCase());
-    if (!titleMatch && !msgMatch) return false;
-
-    if (filterTab === 'support') {
-      return (
-        c.channelType === 'user_admin' ||
-        c.channelType === 'driver_admin' ||
-        c.id.startsWith('ua_') ||
-        c.id.startsWith('da_')
-      );
-    }
-    if (filterTab === 'direct') {
-      return c.channelType === 'user_driver' || c.channelType === 'booking';
-    }
-    return true;
+    return titleMatch || msgMatch;
   });
 
-  // Calculate total unread
-  const totalUnread = channels.reduce((acc, c) => acc + (c.unreadCounts?.[currentUserId] || 0), 0);
+  // Native mobile back button handler (allows hardware/gesture back button on mobile)
+  useBackHandler(
+    isOpen && Boolean(activeChannelId),
+    () => {
+      setActiveChannelId(null);
+      return true;
+    },
+    20,
+    'chat-channel'
+  );
+
+  useBackHandler(
+    isOpen && !activeChannelId,
+    () => {
+      onClose();
+      return true;
+    },
+    15,
+    'chat-drawer'
+  );
 
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in select-none">
         <div className="bg-white border-2 border-[#0D47A1] rounded-t-3xl sm:rounded-3xl w-full max-w-lg h-[85vh] sm:h-[650px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom">
           {/* Drawer Header */}
-          <div className="bg-[#0D47A1] text-white px-4 py-3 flex items-center justify-between shrink-0 shadow-md">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="bg-[#0D47A1] text-white px-4 py-3.5 flex items-center justify-between shrink-0 shadow-md">
+            <div className="flex items-center gap-2.5 min-w-0">
               {activeChannelId ? (
-                <button
-                  onClick={() => setActiveChannelId(null)}
-                  className="p-1.5 hover:bg-white/10 rounded-xl transition-colors shrink-0"
-                  title="Back to conversations"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
+                <>
+                  {/* Back button hidden on mobile since mobile devices have native back button/gestures */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveChannelId(null)}
+                    className="hidden sm:inline-flex p-1.5 hover:bg-white/10 rounded-xl transition-colors shrink-0"
+                    title="Back to conversations"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-white" />
+                  </button>
+                  <div className="sm:hidden w-9 h-9 rounded-2xl bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
+                    <MessageSquare className="w-5 h-5 text-white" />
+                  </div>
+                </>
               ) : (
-                <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                  <MessageSquare className="w-4 h-4 text-white" />
+                <div className="w-9 h-9 rounded-2xl bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
+                  <MessageSquare className="w-5 h-5 text-white" />
                 </div>
               )}
 
               <div className="min-w-0">
                 <h2 className="text-sm font-black truncate">
                   {activeChannel
-                    ? activeChannel.title || 'Live Chat'
-                    : currentUserRole === 'admin'
-                    ? 'Dispatch Command & Helpdesk Inbox'
-                    : 'E-Shuttle Live Messages & Support'}
+                    ? activeChannel.title || 'Live Ride Chat'
+                    : 'Ride & Driver Messages'}
                 </h2>
-                <p className="text-[10px] text-blue-100 font-bold truncate">
+                <p className="text-[11px] text-blue-100 font-medium truncate">
                   {activeChannel
-                    ? activeChannel.subtitle || '2-Way Encrypted Communication'
-                    : currentUserRole === 'admin'
-                    ? `Managing ${channels.length} User Chats • ${tickets.length} Incident Tickets`
-                    : `${channels.length} Conversations • ${tickets.length} Incident Tickets`}
+                    ? activeChannel.subtitle || '2-Way Live Chat'
+                    : `${filteredChannels.length} active conversations`}
                 </p>
               </div>
             </div>
 
             <button
+              type="button"
               onClick={onClose}
               className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white shrink-0"
               title="Close chat drawer"
@@ -281,6 +254,37 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Dedicated Admin Support Ticket Notice Banner */}
+          {!activeChannelId && (
+            <div className="bg-[#E3F2FD] border-b border-[#0D47A1]/20 p-3 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-[#0D47A1] text-white flex items-center justify-center shrink-0">
+                  <Shield className="w-4 h-4 text-amber-300" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-[#0D47A1] leading-tight truncate">
+                    Looking for Admin Support?
+                  </h4>
+                  <p className="text-[10px] text-slate-600 font-semibold truncate">
+                    Submit or track official issues & incident tickets
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenSupportTickets) {
+                    onClose();
+                    onOpenSupportTickets();
+                  }
+                }}
+                className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white text-[11px] font-black rounded-xl shadow transition-all active:scale-95 shrink-0"
+              >
+                Support Tickets →
+              </button>
+            </div>
+          )}
 
           {/* =========================================================================
               VIEW 1: ACTIVE CHAT CONVERSATION
@@ -292,22 +296,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 {/* Channel Security Banner */}
                 <div className="bg-[#E3F2FD] border border-[#0D47A1]/20 rounded-2xl p-2.5 text-center text-[10px] font-bold text-[#0D47A1] flex items-center justify-center gap-1.5 shadow-sm">
                   <Sparkles className="w-3.5 h-3.5 text-[#0D47A1]" />
-                  <span>Live 2-Way Channel between Passenger, Driver & Admin</span>
+                  <span>Direct 2-Way Channel between Passenger & Driver</span>
                 </div>
 
                 {deduplicateMessages(messages).length === 0 ? (
                   <div className="text-center py-12 text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
                     <p className="text-xs font-bold text-slate-500">No messages yet</p>
-                    <p className="text-[10px]">Type a message below to start the conversation.</p>
+                    <p className="text-[10px]">Type a message below to coordinate with your driver/passenger.</p>
                   </div>
                 ) : (
                   deduplicateMessages(messages).map((msg) => {
                     const isMe =
                       msg.senderId === currentUserId ||
                       (currentUserRole === 'admin' && (msg.senderRole === 'admin' || msg.senderId === 'admin'));
-                    const isAdmin = msg.senderRole === 'admin';
                     const isDriver = msg.senderRole === 'driver';
+                    const isAdmin = msg.senderRole === 'admin';
 
                     return (
                       <div
@@ -392,253 +396,88 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             </div>
           ) : (
             /* =========================================================================
-                VIEW 2: CONVERSATIONS & INCIDENT TICKETS INBOX LIST
+                VIEW 2: CONVERSATIONS INBOX LIST
                ========================================================================= */
             <div className="flex-1 flex flex-col bg-[#F8FAFC] overflow-hidden">
-              {/* Search & Action Bar */}
-              <div className="bg-white p-3 border-b border-slate-200 space-y-2.5">
+              {/* Search Bar */}
+              <div className="bg-white p-3 border-b border-slate-200">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
-                    placeholder="Search chat or incident tickets..."
+                    placeholder="Search ride conversations..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#0D47A1] font-bold focus:outline-none focus:border-[#0D47A1]"
                   />
                 </div>
-
-                {/* Filter Tabs */}
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setFilterTab('all')}
-                    className={`flex-1 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors ${
-                      filterTab === 'all'
-                        ? 'bg-[#0D47A1] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    All ({channels.length})
-                  </button>
-                  <button
-                    onClick={() => setFilterTab('tickets')}
-                    className={`flex-1 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-0.5 ${
-                      filterTab === 'tickets'
-                        ? 'bg-rose-600 text-white'
-                        : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
-                    }`}
-                  >
-                    <ShieldAlert className="w-3 h-3" />
-                    <span>Tickets ({tickets.length})</span>
-                  </button>
-                  <button
-                    onClick={() => setFilterTab('support')}
-                    className={`flex-1 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors ${
-                      filterTab === 'support'
-                        ? 'bg-[#0D47A1] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {currentUserRole === 'admin' ? 'Support Inbox' : 'Admin Help'}
-                  </button>
-                  <button
-                    onClick={() => setFilterTab('direct')}
-                    className={`flex-1 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors ${
-                      filterTab === 'direct'
-                        ? 'bg-[#0D47A1] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Rides
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Incident & Admin Action Banners */}
-              <div className="p-3 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    onClick={() => setShowReportModal(true)}
-                    className="bg-rose-50 border-2 border-rose-500 rounded-2xl p-2.5 flex items-center justify-between shadow-sm cursor-pointer hover:bg-rose-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-rose-600 flex items-center justify-center text-white shrink-0">
-                        <AlertTriangle className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-[11px] font-black text-rose-800">
-                          {currentUserRole === 'admin' ? 'Log Incident' : 'Report Incident'}
-                        </h3>
-                        <p className="text-[9px] font-bold text-rose-700">
-                          {currentUserRole === 'admin' ? 'Record dispatch report' : 'Accident / Lost item'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    onClick={handleStartAdminSupport}
-                    className="bg-[#E3F2FD] border-2 border-[#0D47A1] rounded-2xl p-2.5 flex items-center justify-between shadow-sm cursor-pointer hover:bg-blue-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-[#0D47A1] flex items-center justify-center text-white shrink-0">
-                        <Headphones className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-[11px] font-black text-[#0D47A1]">
-                          {currentUserRole === 'admin' ? 'Helpdesk Inbox' : 'Admin Helpdesk'}
-                        </h3>
-                        <p className="text-[9px] font-bold text-slate-600">
-                          {currentUserRole === 'admin' ? 'Manage user chats' : '2-Way Live Chat'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Inbox Item Content Feed */}
               <div className="flex-1 p-3 overflow-y-auto space-y-2">
-                {filterTab === 'tickets' ? (
-                  /* TICKETS LIST VIEW */
-                  tickets.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400 space-y-1 bg-white rounded-2xl border border-dashed border-slate-200">
-                      <ShieldAlert className="w-7 h-7 mx-auto text-rose-300" />
-                      <p className="text-xs font-bold text-slate-600">No incident tickets filed</p>
-                      <p className="text-[10px] text-slate-400">
-                        Tap "Report Incident" above to file an incident or safety report.
-                      </p>
-                    </div>
-                  ) : (
-                    tickets.map((t) => (
+                {filteredChannels.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 space-y-2">
+                    <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
+                    <p className="text-xs font-bold text-slate-500">No ride chats yet</p>
+                    <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                      Direct chats with your driver or passenger will appear here when an active ride is underway.
+                    </p>
+                  </div>
+                ) : (
+                  filteredChannels.map((c) => {
+                    const unread =
+                      (c.unreadCounts?.[currentUserId] || 0) +
+                      (currentUserRole === 'admin' && currentUser?.uid && currentUser.uid !== 'admin'
+                        ? c.unreadCounts?.[currentUser.uid] || 0
+                        : 0);
+
+                    return (
                       <div
-                        key={t.id}
-                        onClick={() => setActiveChannelId(t.channelId)}
-                        className="p-3 bg-white border-2 border-rose-300 hover:border-rose-600 rounded-2xl cursor-pointer transition-all shadow-sm space-y-1.5"
+                        key={c.id}
+                        onClick={() => setActiveChannelId(c.id)}
+                        className={`p-3 bg-white border-2 rounded-2xl cursor-pointer transition-all hover:border-[#0D47A1] flex items-center justify-between gap-3 shadow-sm ${
+                          unread > 0 ? 'border-[#0D47A1] bg-[#E3F2FD]/40' : 'border-slate-200'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-md">
-                              #{t.ticketNumber}
-                            </span>
-                            <span className="text-[10px] font-extrabold text-slate-700">
-                              {INCIDENT_CATEGORIES[t.category]?.icon} {t.subject}
-                            </span>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center font-black text-white shrink-0 shadow-sm">
+                            <Bike className="w-5 h-5" />
                           </div>
-                          <span
-                            className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
-                              t.status === 'open'
-                                ? 'bg-amber-100 text-amber-800'
-                                : t.status === 'in_progress'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}
-                          >
-                            {t.status.replace('_', ' ')}
-                          </span>
+
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-black text-[#0D47A1] truncate">
+                              {c.title || 'Ride Chat'}
+                            </h4>
+                            <p className="text-[11px] font-bold text-slate-600 truncate mt-0.5">
+                              {c.lastMessage || 'Channel active'}
+                            </p>
+                          </div>
                         </div>
 
-                        <p className="text-[11px] text-slate-600 line-clamp-2 font-medium">
-                          {t.description}
-                        </p>
-
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[9px] text-slate-400 font-bold">
-                          <span>
-                            Urgency: <strong className="text-rose-700">{t.priority.toUpperCase()}</strong>
+                        <div className="flex flex-col items-end shrink-0 gap-1">
+                          <span className="text-[9px] font-extrabold text-slate-400">
+                            {c.updatedAt
+                              ? new Date(c.updatedAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
                           </span>
-                          <span className="text-[#0D47A1] font-black flex items-center gap-1">
-                            <span>Open 2-Way Chat</span> &rarr;
-                          </span>
+                          {unread > 0 && (
+                            <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                              {unread}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    ))
-                  )
-                ) : (
-                  /* CHANNELS LIST VIEW */
-                  filteredChannels.length === 0 ? (
-                    <div className="text-center py-10 text-slate-400 space-y-2">
-                      <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
-                      <p className="text-xs font-bold text-slate-500">No chat channels found</p>
-                      <p className="text-[10px]">Tap Admin Helpdesk above to start a conversation.</p>
-                    </div>
-                  ) : (
-                    filteredChannels.map((c) => {
-                      const unread =
-                        (c.unreadCounts?.[currentUserId] || 0) +
-                        (currentUserRole === 'admin' && currentUser?.uid && currentUser.uid !== 'admin'
-                          ? c.unreadCounts?.[currentUser.uid] || 0
-                          : 0);
-                      const isSupport = c.channelType === 'user_admin' || c.channelType === 'driver_admin';
-
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => setActiveChannelId(c.id)}
-                          className={`p-3 bg-white border-2 rounded-2xl cursor-pointer transition-all hover:border-[#0D47A1] flex items-center justify-between gap-3 shadow-sm ${
-                            unread > 0 ? 'border-[#0D47A1] bg-[#E3F2FD]/40' : 'border-slate-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div
-                              className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-white shrink-0 ${
-                                isSupport ? 'bg-[#0D47A1]' : 'bg-emerald-600'
-                              }`}
-                            >
-                              {isSupport ? <Shield className="w-5 h-5" /> : <Bike className="w-5 h-5" />}
-                            </div>
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <h4 className="text-xs font-black text-[#0D47A1] truncate">
-                                  {c.title || 'Live Chat'}
-                                </h4>
-                                {isSupport && (
-                                  <span className="text-[8px] font-black bg-[#0D47A1] text-white px-1.5 py-0.2 rounded uppercase">
-                                    OFFICIAL
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] font-bold text-slate-600 truncate mt-0.5">
-                                {c.lastMessage || 'Channel active'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end shrink-0 gap-1">
-                            <span className="text-[9px] font-extrabold text-slate-400">
-                              {c.updatedAt
-                                ? new Date(c.updatedAt).toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })
-                                : ''}
-                            </span>
-                            {unread > 0 && (
-                              <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                                {unread}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )
+                    );
+                  })
                 )}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Incident Report Modal */}
-      <ReportIncidentModal
-        isOpen={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        defaultRideId={initialBookingId}
-        onSuccessCreated={(cid) => {
-          setActiveChannelId(cid);
-        }}
-      />
     </>
   );
 };

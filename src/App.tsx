@@ -14,6 +14,7 @@ import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
 import { ChatDrawer } from './components/Common/ChatDrawer';
+import { SupportTicketsModal } from './components/Common/SupportTicketsModal';
 import { NotificationModal } from './components/Common/NotificationModal';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
@@ -22,20 +23,33 @@ const MainAppContent: React.FC = () => {
   const { logoUrl } = useAppLogo();
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [isSupportTicketsOpen, setIsSupportTicketsOpen] = useState<boolean>(false);
+  const [initialTicketId, setInitialTicketId] = useState<string | undefined>(undefined);
   const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
   const tabHistoryRef = useRef<string[]>(['home']);
 
-  // Global listener to trigger notification modal from any bell button or service dispatch
+  // Global listener to trigger notification modal and support tickets from anywhere
   useEffect(() => {
     const handleOpenModal = () => setIsNotificationOpen(true);
+    const handleOpenTickets = (e: Event) => {
+      const customEvent = e as CustomEvent<{ ticketId?: string }>;
+      setInitialTicketId(customEvent.detail?.ticketId);
+      setIsSupportTicketsOpen(true);
+    };
+
     window.addEventListener('eshuttle_open_notifications', handleOpenModal);
-    return () => window.removeEventListener('eshuttle_open_notifications', handleOpenModal);
+    window.addEventListener('eshuttle_open_support_tickets', handleOpenTickets);
+
+    return () => {
+      window.removeEventListener('eshuttle_open_notifications', handleOpenModal);
+      window.removeEventListener('eshuttle_open_support_tickets', handleOpenTickets);
+    };
   }, []);
 
   // Track tab history for back button navigation
   const handleTabChange = (newTab: string) => {
     if (newTab === 'support') {
-      setIsChatOpen(true);
+      setIsSupportTicketsOpen(true);
       return;
     }
     if (newTab !== activeTab) {
@@ -146,10 +160,24 @@ const MainAppContent: React.FC = () => {
         )}
       </div>
 
-      {/* Global Live Chat & Incident Support Drawer (Controlled via BottomNav) */}
+      {/* Global Live Chat Drawer */}
       <ChatDrawer
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+        onOpenSupportTickets={() => {
+          setIsChatOpen(false);
+          setIsSupportTicketsOpen(true);
+        }}
+      />
+
+      {/* Dedicated Support Tickets Modal */}
+      <SupportTicketsModal
+        isOpen={isSupportTicketsOpen}
+        onClose={() => {
+          setIsSupportTicketsOpen(false);
+          setInitialTicketId(undefined);
+        }}
+        initialTicketId={initialTicketId}
       />
 
       {/* Global Notification Center Modal */}

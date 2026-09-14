@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   Sparkles,
   Key,
-  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';

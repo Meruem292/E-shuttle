@@ -52,6 +52,14 @@ export interface IncidentTicket {
   resolvedAt?: any;
 }
 
+export function openSupportTicketsModal(ticketId?: string) {
+  window.dispatchEvent(
+    new CustomEvent('eshuttle_open_support_tickets', {
+      detail: { ticketId },
+    })
+  );
+}
+
 const LOCAL_TICKETS_KEY = 'eshuttle_incident_tickets_v1';
 
 function getLocalTickets(): IncidentTicket[] {

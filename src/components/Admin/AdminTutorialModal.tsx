@@ -53,7 +53,17 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(initialStepIndex);
 
   useBackHandler(
-    isOpen,
+    isOpen && currentStep > 0,
+    () => {
+      setCurrentStep((prev) => prev - 1);
+      return true;
+    },
+    35,
+    'admin-tutorial-step'
+  );
+
+  useBackHandler(
+    isOpen && currentStep === 0,
     () => {
       onClose();
       return true;
@@ -551,7 +561,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
             <button
               onClick={handlePrev}
               disabled={currentStep === 0}
-              className="px-3 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 disabled:opacity-40 hover:bg-slate-100 transition-colors"
+              className="hidden sm:inline-flex px-3 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl items-center gap-1 disabled:opacity-40 hover:bg-slate-100 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Back</span>

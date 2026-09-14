@@ -29,6 +29,7 @@ import {
 import { LocationPickerMap } from '../Common/LocationPickerMap';
 import { useAdminPin } from '../../contexts/AdminPinContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useBackHandler } from '../../contexts/NativeBackContext';
 
 interface StationManagementProps {
   onStationSelectForMap?: (station: ShuttleStation) => void;
@@ -88,6 +89,27 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
   useEffect(() => {
     pinningTargetTypeRef.current = pinningTargetType;
   }, [pinningTargetType]);
+
+  // Native back handlers
+  useBackHandler(
+    showAddForm && formStep === 2,
+    () => {
+      setFormStep(1);
+      return true;
+    },
+    25,
+    'station-form-step'
+  );
+
+  useBackHandler(
+    showAddForm && formStep === 1,
+    () => {
+      setShowAddForm(false);
+      return true;
+    },
+    20,
+    'station-form-modal'
+  );
 
   // 1. Subscribe to stations & zones
   useEffect(() => {
@@ -1231,7 +1253,7 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
                     <button
                       type="button"
                       onClick={() => setFormStep(1)}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+                      className="hidden sm:inline-flex px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold items-center gap-1 transition-colors"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                       <span>Back</span>
