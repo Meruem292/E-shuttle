@@ -24,6 +24,9 @@ import { listenToOperationalZones } from '../../services/zoneService';
 import { OperationalZone } from '../../types';
 import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../services/ebikeService';
 import { useBackHandler } from '../../contexts/NativeBackContext';
+import { useAdminPin } from '../../contexts/AdminPinContext';
+import { useToast } from '../../contexts/ToastContext';
+import { AdminPinSettingsCard } from './AdminPinSettingsCard';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import {
@@ -105,16 +108,18 @@ import {
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
 
-interface AdminDashboardProps {
+export interface AdminDashboardProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
   activeTab,
   setActiveTab,
 }) => {
   const { role, logout, currentUser, userProfile, refreshProfile } = useAuth();
+  const { promptAdminPin } = useAdminPin();
+  const toast = useToast();
 
   // Admin Profile State
   const [profileFullName, setProfileFullName] = useState<string>('');
@@ -152,6 +157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const phoneErr = getPhoneValidationError(cleanPhone);
         if (phoneErr) {
           setProfileMsg({ type: 'error', text: phoneErr });
+          toast.warning(phoneErr);
           return;
         }
       }
@@ -196,13 +202,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         severity: 'info',
       }).catch(() => {});
 
+      const successMsg = `Admin profile updated! You can now log in using username: ${cleanUsername}`;
       setProfileMsg({
         type: 'success',
-        text: `Admin profile updated! You can now log in using username: ${cleanUsername}`,
+        text: successMsg,
       });
+      toast.success(successMsg);
     } catch (err: any) {
       console.error('Failed to update admin profile:', err);
-      setProfileMsg({ type: 'error', text: err?.message || 'Failed to update admin profile.' });
+      const errMsg = err?.message || 'Failed to update admin profile.';
+      setProfileMsg({ type: 'error', text: errMsg });
+      toast.error(errMsg);
     } finally {
       setProfileSaving(false);
     }
@@ -222,60 +232,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!currentUser || !currentUser.email) return;
 
     if (newPass.length < 6) {
-      setPassMsg({ type: 'error', text: 'New password must be at least 6 characters long.' });
+      const err = 'New password must be at least 6 characters long.';
+      setPassMsg({ type: 'error', text: err });
+      toast.warning(err);
       return;
     }
 
     if (newPass !== confirmPass) {
-      setPassMsg({ type: 'error', text: 'New password and confirmation do not match.' });
+      const err = 'New password and confirmation do not match.';
+      setPassMsg({ type: 'error', text: err });
+      toast.warning(err);
       return;
     }
 
-    setPassChanging(true);
-    setPassMsg(null);
+    promptAdminPin({
+      title: 'Authorize Master Password Change',
+      actionDescription: 'Enter Secret PIN to authorize changing administrator master login password',
+      severity: 'danger',
+      onConfirm: async () => {
+        setPassChanging(true);
+        setPassMsg(null);
 
-    try {
-      const credential = EmailAuthProvider.credential(currentUser.email, currentPass);
-      await reauthenticateWithCredential(currentUser, credential);
-      await updatePassword(currentUser, newPass);
+        try {
+          const credential = EmailAuthProvider.credential(currentUser.email!, currentPass);
+          await reauthenticateWithCredential(currentUser, credential);
+          await updatePassword(currentUser, newPass);
 
-      logActivity({
-        action: 'UPDATE',
-        actionLabel: 'Changed Admin Password',
-        entityType: 'ADMIN',
-        entityId: currentUser.uid,
-        entityName: userProfile?.fullName || currentUser.email || 'Admin',
-        summary: `Administrator "${currentUser.email}" successfully updated account password`,
-        details: {
-          summary: 'Security credentials modified for administrator account',
-        },
-        performedBy: {
-          uid: currentUser.uid,
-          name: userProfile?.fullName || 'Platform Administrator',
-          email: currentUser.email,
-          role: 'admin',
-        },
-        severity: 'warning',
-      }).catch(() => {});
+          logActivity({
+            action: 'UPDATE',
+            actionLabel: 'Changed Admin Password',
+            entityType: 'ADMIN',
+            entityId: currentUser.uid,
+            entityName: userProfile?.fullName || currentUser.email || 'Admin',
+            summary: `Administrator "${currentUser.email}" successfully updated account password`,
+            details: {
+              summary: 'Security credentials modified for administrator account',
+            },
+            performedBy: {
+              uid: currentUser.uid,
+              name: userProfile?.fullName || 'Platform Administrator',
+              email: currentUser.email,
+              role: 'admin',
+            },
+            severity: 'warning',
+          }).catch(() => {});
 
-      setPassMsg({ type: 'success', text: 'Admin password changed successfully!' });
-      setCurrentPass('');
-      setNewPass('');
-      setConfirmPass('');
-    } catch (err: any) {
-      console.error('Change password failed:', err);
-      let errorText = 'Failed to change password.';
-      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
-        errorText = 'Current password is incorrect. Please verify and try again.';
-      } else if (err?.code === 'auth/requires-recent-login') {
-        errorText = 'Session expired. Please log out and sign in again to update password.';
-      } else if (err?.message) {
-        errorText = err.message;
-      }
-      setPassMsg({ type: 'error', text: errorText });
-    } finally {
-      setPassChanging(false);
-    }
+          setPassMsg({ type: 'success', text: 'Admin password changed successfully!' });
+          toast.success('Admin password changed successfully!');
+          setCurrentPass('');
+          setNewPass('');
+          setConfirmPass('');
+        } catch (err: any) {
+          console.error('Change password failed:', err);
+          let errorText = 'Failed to change password.';
+          if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+            errorText = 'Current password is incorrect. Please verify and try again.';
+          } else if (err?.code === 'auth/requires-recent-login') {
+            errorText = 'Session expired. Please log out and sign in again to update password.';
+          } else if (err?.message) {
+            errorText = err.message;
+          }
+          setPassMsg({ type: 'error', text: errorText });
+          toast.error(errorText);
+        } finally {
+          setPassChanging(false);
+        }
+      },
+    });
   };
 
   if (role !== 'admin') {
@@ -332,13 +355,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       if (res.success && res.url) {
         finalLogoUrl = res.url;
-        if (res.storageType === 'firebase') {
-          setLogoSuccessMsg('Logo uploaded successfully to Firebase Storage!');
-        } else {
-          setLogoSuccessMsg('Logo uploaded and saved successfully!');
-        }
+        const successMsg = res.storageType === 'firebase'
+          ? 'Logo uploaded successfully to Firebase Storage!'
+          : 'Logo uploaded and saved successfully!';
+        setLogoSuccessMsg(successMsg);
+        toast.success(successMsg);
       } else {
-        setLogoErrorMsg(res.error || 'Failed to upload logo image.');
+        const errorMsg = res.error || 'Failed to upload logo image.';
+        setLogoErrorMsg(errorMsg);
+        toast.error(errorMsg);
         return;
       }
 
@@ -374,54 +399,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }).catch(() => {});
     } catch (err: any) {
       console.error('Error uploading logo:', err);
-      setLogoErrorMsg(err?.message || 'Failed to process image file.');
+      const errMsg = err?.message || 'Failed to process image file.';
+      setLogoErrorMsg(errMsg);
+      toast.error(errMsg);
     } finally {
       setLogoUploading(false);
       e.target.value = '';
     }
   };
 
-  // Reset Logo back to Default
-  const handleResetLogo = async () => {
-    if (!window.confirm('Reset app logo back to default official logo?')) return;
-    setLogoUploading(true);
-    setLogoErrorMsg(null);
-    try {
-      const updatedSettings = {
-        ...fareSettings,
-        appLogoUrl: '',
-        updatedAt: serverTimestamp(),
-      };
-      setFareSettings(updatedSettings);
-      await setDoc(doc(db, 'adminSettings', 'default'), updatedSettings);
+  // Reset Logo back to Default (Protected by Secret PIN)
+  const handleResetLogo = () => {
+    promptAdminPin({
+      title: 'Authorize App Logo Reset',
+      actionDescription: 'Enter Secret PIN to reset the application branding back to default official asset',
+      severity: 'warning',
+      onConfirm: async () => {
+        setLogoUploading(true);
+        setLogoErrorMsg(null);
+        try {
+          const updatedSettings = {
+            ...fareSettings,
+            appLogoUrl: '',
+            updatedAt: serverTimestamp(),
+          };
+          setFareSettings(updatedSettings);
+          await setDoc(doc(db, 'adminSettings', 'default'), updatedSettings);
 
-      logActivity({
-        action: 'SETTINGS_UPDATE',
-        actionLabel: 'Reset Application Logo',
-        entityType: 'SETTINGS',
-        entityId: 'default',
-        entityName: 'App Branding Logo',
-        summary: 'Administrator restored application branding logo to default official asset',
-        details: {
-          summary: 'Application branding logo reset to default system asset',
-        },
-        performedBy: {
-          uid: currentUser?.uid || 'admin',
-          name: userProfile?.fullName || 'Platform Administrator',
-          email: currentUser?.email || undefined,
-          role: 'admin',
-        },
-        severity: 'info',
-      }).catch(() => {});
+          logActivity({
+            action: 'SETTINGS_UPDATE',
+            actionLabel: 'Reset Application Logo',
+            entityType: 'SETTINGS',
+            entityId: 'default',
+            entityName: 'App Branding Logo',
+            summary: 'Administrator restored application branding logo to default official asset',
+            details: {
+              summary: 'Application branding logo reset to default system asset with Secret PIN authorization',
+            },
+            performedBy: {
+              uid: currentUser?.uid || 'admin',
+              name: userProfile?.fullName || 'Platform Administrator',
+              email: currentUser?.email || undefined,
+              role: 'admin',
+            },
+            severity: 'info',
+          }).catch(() => {});
 
-      setLogoSuccessMsg('Logo reset to default official logo.');
-      setTimeout(() => setLogoSuccessMsg(null), 3000);
-    } catch (err: any) {
-      console.error('Failed to reset logo:', err);
-      setLogoErrorMsg('Failed to reset logo.');
-    } finally {
-      setLogoUploading(false);
-    }
+          setLogoSuccessMsg('Logo reset to default official logo.');
+          toast.success('Logo reset to default official logo.');
+        } catch (err: any) {
+          console.error('Failed to reset logo:', err);
+          const errMsg = err?.message || 'Failed to reset logo.';
+          setLogoErrorMsg(errMsg);
+          toast.error(errMsg);
+        } finally {
+          setLogoUploading(false);
+        }
+        setTimeout(() => setLogoSuccessMsg(null), 3000);
+      },
+    });
   };
 
   // RFID Pairing Modal State
@@ -575,68 +611,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     'admin-delete-account-modal'
   );
 
-  // Handler: Delete Account with Audit Logging
-  const handleDeleteAccount = async () => {
+  // Handler: Delete Account with Audit Logging & Secret PIN
+  const handleDeleteAccount = () => {
     if (!deleteConfirmTarget) return;
-    setDeletingAccount(true);
-    const { id, name, role: targetRole, email } = deleteConfirmTarget;
+    const target = deleteConfirmTarget;
 
-    try {
-      if (targetRole === 'driver') {
-        await deleteDoc(doc(db, 'drivers', id));
-      } else {
-        await deleteDoc(doc(db, 'users', id));
-      }
+    promptAdminPin({
+      title: `Authorize Delete ${target.role.toUpperCase()} Account`,
+      actionDescription: `Enter Secret PIN to permanently purge ${target.role} account "${target.name}" from database records`,
+      entityName: `${target.name} (${target.role})`,
+      severity: 'danger',
+      onConfirm: async () => {
+        setDeletingAccount(true);
+        const { id, name, role: targetRole, email } = target;
 
-      if (selectedCustomer?.uid === id) setSelectedCustomer(null);
-      if (selectedDriverModal?.uid === id) setSelectedDriverModal(null);
+        try {
+          if (targetRole === 'driver') {
+            await deleteDoc(doc(db, 'drivers', id));
+          } else {
+            await deleteDoc(doc(db, 'users', id));
+          }
 
-      logActivity({
-        action: 'DELETE',
-        actionLabel: `Deleted ${targetRole.toUpperCase()} Account`,
-        entityType: targetRole === 'driver' ? 'DRIVER' : targetRole === 'admin' ? 'ADMIN' : 'USER',
-        entityId: id,
-        entityName: name,
-        summary: `Administrator permanently deleted ${targetRole} account "${name}" (${email || id})`,
-        details: {
-          summary: `Account purged from database records by administrator`,
-          metadata: { id, name, role: targetRole, email },
-        },
-        performedBy: {
-          uid: currentUser?.uid || 'admin',
-          name: userProfile?.fullName || 'Platform Administrator',
-          email: currentUser?.email || undefined,
-          role: 'admin',
-        },
-        severity: 'danger',
-      }).catch(() => {});
+          if (selectedCustomer?.uid === id) setSelectedCustomer(null);
+          if (selectedDriverModal?.uid === id) setSelectedDriverModal(null);
 
-      setDeleteConfirmTarget(null);
-    } catch (err: any) {
-      console.error('Failed to delete account:', err);
-      alert('Failed to delete account: ' + (err?.message || 'Error occurred'));
-    } finally {
-      setDeletingAccount(false);
-    }
+          logActivity({
+            action: 'DELETE',
+            actionLabel: `Deleted ${targetRole.toUpperCase()} Account`,
+            entityType: targetRole === 'driver' ? 'DRIVER' : targetRole === 'admin' ? 'ADMIN' : 'USER',
+            entityId: id,
+            entityName: name,
+            summary: `Administrator permanently deleted ${targetRole} account "${name}" (${email || id})`,
+            details: {
+              summary: `Account purged from database records by administrator with Secret PIN authorization`,
+              metadata: { id, name, role: targetRole, email },
+            },
+            performedBy: {
+              uid: currentUser?.uid || 'admin',
+              name: userProfile?.fullName || 'Platform Administrator',
+              email: currentUser?.email || undefined,
+              role: 'admin',
+            },
+            severity: 'danger',
+          }).catch(() => {});
+
+          toast.success(`Account "${name}" (${targetRole}) permanently deleted.`);
+          setDeleteConfirmTarget(null);
+        } catch (err: any) {
+          console.error('Failed to delete account:', err);
+          const errMsg = 'Failed to delete account: ' + (err?.message || 'Error occurred');
+          toast.error(errMsg);
+        } finally {
+          setDeletingAccount(false);
+        }
+      },
+    });
   };
 
   // Handler: Create Account with Audit Logging
   const handleCreateAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createFullName.trim() || !createEmail.trim()) {
-      setCreateError('Full name and email are required.');
+      const err = 'Full name and email are required.';
+      setCreateError(err);
+      toast.warning(err);
       return;
     }
 
     const nameErr = getFullNameValidationError(createFullName.trim());
     if (nameErr) {
       setCreateError(nameErr);
+      toast.warning(nameErr);
       return;
     }
 
     const emailFormatErr = getEmailValidationError(createEmail.trim());
     if (emailFormatErr) {
       setCreateError(emailFormatErr);
+      toast.warning(emailFormatErr);
       return;
     }
 
@@ -644,24 +696,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const phoneErr = getPhoneValidationError(createPhone.trim());
       if (phoneErr) {
         setCreateError(phoneErr);
+        toast.warning(phoneErr);
         return;
       }
     }
 
     if (createRole === 'driver') {
       if (!createLicenseNumber.trim()) {
-        setCreateError("Driver's License Number is required for driver accounts.");
+        const err = "Driver's License Number is required for driver accounts.";
+        setCreateError(err);
+        toast.warning(err);
         return;
       }
       const licenseErr = getDriverLicenseValidationError(createLicenseNumber.trim());
       if (licenseErr) {
         setCreateError(licenseErr);
+        toast.warning(licenseErr);
         return;
       }
       if (createRfidUid.trim()) {
         const rfidErr = getRfidValidationError(createRfidUid.trim());
         if (rfidErr) {
           setCreateError(rfidErr);
+          toast.warning(rfidErr);
           return;
         }
       }
@@ -722,6 +779,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           },
           severity: 'success',
         }).catch(() => {});
+
+        toast.success(`Driver account created for "${createFullName.trim()}".`);
       } else {
         const userDoc: UserProfile = {
           uid: newUid,
@@ -760,6 +819,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           },
           severity: 'success',
         }).catch(() => {});
+
+        toast.success(`Passenger account created for "${createFullName.trim()}".`);
       }
 
       // Reset form and close
@@ -774,7 +835,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setCreateRfidUid('');
     } catch (err: any) {
       console.error('Failed to create account:', err);
-      setCreateError(err?.message || 'Failed to create account.');
+      const errMsg = err?.message || 'Failed to create account.';
+      setCreateError(errMsg);
+      toast.error(errMsg);
     } finally {
       setCreatingAccount(false);
     }
@@ -916,8 +979,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         severity: 'info',
       }).catch(() => {});
-    } catch (err) {
+
+      toast.success(`Driver "${targetDriver?.fullName || driverId}" assigned to ${matchedZone?.name || 'Unassigned'}.`);
+    } catch (err: any) {
       console.error('Error updating driver zone:', err);
+      toast.error(err?.message || 'Error updating driver zone');
     }
   };
 
@@ -950,8 +1016,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         severity: newStatus === 'APPROVED' ? 'success' : 'danger',
       }).catch(() => {});
-    } catch (err) {
+
+      toast.success(`Driver status updated to ${newStatus}.`);
+    } catch (err: any) {
       console.error('Error updating driver status:', err);
+      toast.error(err?.message || 'Error updating driver status');
     }
   };
 
@@ -984,8 +1053,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         severity: newStatus === 'APPROVED' ? 'success' : 'danger',
       }).catch(() => {});
-    } catch (err) {
+
+      toast.success(`Passenger status updated to ${newStatus}.`);
+    } catch (err: any) {
       console.error('Error updating customer status:', err);
+      toast.error(err?.message || 'Error updating customer status');
     }
   };
 
@@ -1020,11 +1092,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         severity: 'success',
       }).catch(() => {});
 
+      toast.success(`Driver "${driver.fullName}" approved! Ready for RFID card assignment.`);
       setRfidModalDriver({ ...driver, accountStatus: 'APPROVED' });
       setModalRfidInput(latestScannedRfid?.rfidUid || driver.rfidCardUid || '');
       setModalSuccessMsg('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error approving driver:', err);
+      toast.error(err?.message || 'Error approving driver');
     }
   };
 
@@ -1036,6 +1110,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const rfidErr = getRfidValidationError(modalRfidInput.trim());
     if (rfidErr) {
       setModalRfidError(rfidErr);
+      toast.warning(rfidErr);
       return;
     }
 
@@ -1045,55 +1120,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       await pairDriverRfidCard(rfidModalDriver.uid, modalRfidInput.trim().toUpperCase());
-      setModalSuccessMsg(`RFID Card [${modalRfidInput.toUpperCase()}] linked to ${rfidModalDriver.fullName}!`);
+      const successText = `RFID Card [${modalRfidInput.toUpperCase()}] linked to ${rfidModalDriver.fullName}!`;
+      setModalSuccessMsg(successText);
+      toast.success(successText);
       setTimeout(() => {
         setRfidModalDriver(null);
         setModalSuccessMsg('');
         setModalRfidError(null);
       }, 1400);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error pairing RFID card:', err);
       setModalRfidError('Failed to link RFID card. Please retry.');
+      toast.error('Failed to link RFID card. Please retry.');
     } finally {
       setModalPairing(false);
     }
   };
 
-  // Save Fare Settings
-  const handleSaveSettings = async () => {
-    setSettingsSaving(true);
-    setSettingsSuccess(false);
+  // Save Fare Settings (Protected by Secret PIN)
+  const handleSaveSettings = () => {
+    promptAdminPin({
+      title: 'Authorize Save Dispatch Parameters',
+      actionDescription: 'Enter Secret PIN to update shuttle system dispatch settings and operational rules',
+      severity: 'warning',
+      onConfirm: async () => {
+        setSettingsSaving(true);
+        setSettingsSuccess(false);
 
-    try {
-      await setDoc(doc(db, 'adminSettings', 'default'), {
-        ...fareSettings,
-        updatedAt: serverTimestamp(),
-      });
-      setSettingsSuccess(true);
-      setTimeout(() => setSettingsSuccess(false), 3000);
+        try {
+          await setDoc(doc(db, 'adminSettings', 'default'), {
+            ...fareSettings,
+            updatedAt: serverTimestamp(),
+          });
+          setSettingsSuccess(true);
+          toast.success('Operational parameters and dispatch settings updated.');
+          setTimeout(() => setSettingsSuccess(false), 3000);
 
-      logActivity({
-        action: 'SETTINGS_UPDATE',
-        actionLabel: 'Updated Shuttle Dispatch Settings',
-        entityType: 'SETTINGS',
-        entityId: 'default',
-        entityName: 'Operational Policy & Dispatch Settings',
-        summary: `Admin updated operational parameters (Search Radius: ${fareSettings.initialSearchRadiusKm}km, Max Radius: ${fareSettings.maxServiceRadiusKm}km) - Free Shuttle Policy`,
-        details: {
-          summary: `Operational dispatch configuration updated (100% Free Public Shuttle)`,
-          after: {
-            initialSearchRadiusKm: fareSettings.initialSearchRadiusKm,
-            maxServiceRadiusKm: fareSettings.maxServiceRadiusKm,
-            isFreeShuttle: true,
-          },
-        },
-        severity: 'info',
-      }).catch(() => {});
-    } catch (err) {
-      console.error('Error saving settings:', err);
-    } finally {
-      setSettingsSaving(false);
-    }
+          logActivity({
+            action: 'SETTINGS_UPDATE',
+            actionLabel: 'Updated Shuttle Dispatch Settings',
+            entityType: 'SETTINGS',
+            entityId: 'default',
+            entityName: 'Operational Policy & Dispatch Settings',
+            summary: `Admin updated operational parameters (Search Radius: ${fareSettings.initialSearchRadiusKm}km, Max Radius: ${fareSettings.maxServiceRadiusKm}km) - Free Shuttle Policy`,
+            details: {
+              summary: `Operational dispatch configuration updated (100% Free Public Shuttle)`,
+              after: {
+                initialSearchRadiusKm: fareSettings.initialSearchRadiusKm,
+                maxServiceRadiusKm: fareSettings.maxServiceRadiusKm,
+                isFreeShuttle: true,
+              },
+            },
+            severity: 'info',
+          }).catch(() => {});
+        } catch (err: any) {
+          console.error('Error saving settings:', err);
+          toast.error(err?.message || 'Error saving settings');
+        } finally {
+          setSettingsSaving(false);
+        }
+      },
+    });
   };
 
   // Date Formatter Helper
@@ -2766,7 +2853,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
 
-          {/* CARD 3: SHUTTLE SYSTEM PARAMETERS */}
+          {/* CARD 3: ADMIN ACTION SECRET PIN CONFIGURATION */}
+          <AdminPinSettingsCard />
+
+          {/* CARD 4: SHUTTLE SYSTEM PARAMETERS */}
           <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
             <h3 className="font-black text-sm text-[#0D47A1]">Shuttle Operation Parameters</h3>
 
@@ -3574,7 +3664,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="flex items-center gap-1.5">
                           <select
                             value={ticket.status}
-                            onChange={(e) => updateTicketStatus(ticket.id, e.target.value as any)}
+                            onChange={(e) => {
+                              const newStatus = e.target.value as any;
+                              updateTicketStatus(ticket.id, newStatus);
+                              toast.info(`Ticket #${ticket.ticketNumber} updated to ${newStatus.toUpperCase().replace('_', ' ')}.`);
+                            }}
                             className="bg-slate-50 border-2 border-[#0D47A1] text-[#0D47A1] font-black text-xs rounded-xl px-2.5 py-1 focus:outline-none"
                           >
                             <option value="open">OPEN</option>
@@ -4068,3 +4162,5 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     </div>
   );
 };
+
+export const AdminDashboard = AdminDashboardContent;

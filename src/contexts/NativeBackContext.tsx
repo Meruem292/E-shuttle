@@ -122,7 +122,10 @@ export const NativeBackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 export const useNativeBack = () => {
   const context = useContext(NativeBackContext);
   if (!context) {
-    throw new Error('useNativeBack must be used within a NativeBackProvider');
+    return {
+      registerBackHandler: () => () => {},
+      showExitNotification: () => {},
+    };
   }
   return context;
 };

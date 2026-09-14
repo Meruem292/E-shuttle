@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { MapView } from '../MapView';
 import { LocationPoint, Booking, DriverProfile, ShuttleStation, OperationalZone } from '../../types';
 import {
@@ -56,6 +57,7 @@ import { NotificationBellButton } from '../Common/NotificationBellButton';
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const toast = useToast();
 
   // Step management: 'select_zone' (Initial Page) | 'booking' (Stations & Request)
   const [bookingStep, setBookingStep] = useState<'select_zone' | 'booking'>('select_zone');
@@ -592,16 +594,16 @@ export const HomeMapBooking: React.FC = () => {
     if (!currentUser || !userProfile || !destination) return;
 
     if (!proximityCheck.isWithinRadius) {
-      setBookingError(
-        `Pickup point is outside the 100m pin geofence. Please select or walk within 100m of a designated station pin (${proximityCheck.nearestStation?.name || 'Nearest Station'}).`
-      );
+      const err = `Pickup point is outside the 100m pin geofence. Please select or walk within 100m of a designated station pin (${proximityCheck.nearestStation?.name || 'Nearest Station'}).`;
+      setBookingError(err);
+      toast.warning(err);
       return;
     }
 
     if (destinationProximityCheck && !destinationProximityCheck.isWithinRadius) {
-      setBookingError(
-        `Drop-off destination is outside the 100m pin geofence. Please select a point within 100m of a designated station pin (${destinationProximityCheck.nearestStation?.name || 'Nearest Destination'}).`
-      );
+      const err = `Drop-off destination is outside the 100m pin geofence. Please select a point within 100m of a designated station pin (${destinationProximityCheck.nearestStation?.name || 'Nearest Destination'}).`;
+      setBookingError(err);
+      toast.warning(err);
       return;
     }
 
@@ -625,9 +627,12 @@ export const HomeMapBooking: React.FC = () => {
         effectiveZoneId,
         effectiveZoneName
       );
+      toast.success('Shuttle ride requested! Searching for available drivers nearby...');
     } catch (err: any) {
       console.error('Booking error:', err);
-      setBookingError(err.message || 'Failed to create booking.');
+      const errMsg = err.message || 'Failed to create booking.';
+      setBookingError(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsBookingLoading(false);
     }
@@ -639,8 +644,10 @@ export const HomeMapBooking: React.FC = () => {
     try {
       await updateBookingStatus(activeBooking.id, 'CANCELLED');
       setActiveBooking(null);
-    } catch (err) {
+      toast.info('Your shuttle ride request has been cancelled.');
+    } catch (err: any) {
       console.error('Error cancelling booking:', err);
+      toast.error(err?.message || 'Failed to cancel booking.');
     }
   };
 
@@ -658,8 +665,10 @@ export const HomeMapBooking: React.FC = () => {
       setShowRatingModal(false);
       setCompletedBookingToRate(null);
       setDestination(null);
-    } catch (err) {
+      toast.success('Thank you for your rating and feedback!');
+    } catch (err: any) {
       console.error('Error submitting rating:', err);
+      toast.error(err?.message || 'Failed to submit rating.');
     }
   };
 

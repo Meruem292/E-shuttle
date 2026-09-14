@@ -27,6 +27,8 @@ import {
   sendAdminRegistrationScan,
 } from '../../services/ebikeService';
 import { listenToOperationalZones } from '../../services/zoneService';
+import { useAdminPin } from '../../contexts/AdminPinContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface EBikeManagementProps {
   initialSubTab?: 'map' | 'shuttles' | 'rfid' | 'simulator' | 'esp32_code';
@@ -37,6 +39,8 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
   initialSubTab = 'shuttles',
   initialDriverId = null,
 }) => {
+  const { promptAdminPin } = useAdminPin();
+  const toast = useToast();
   const [ebikes, setEbikes] = useState<EBikeDevice[]>([]);
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [zones, setZones] = useState<OperationalZone[]>([]);
@@ -184,7 +188,9 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
   const handleRegisterBike = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeviceId || !newSerialNumber || !newName) {
-      setRegError('Please fill in Device ID, E-Shuttle Plate Number, and E-Shuttle Name.');
+      const err = 'Please fill in Device ID, E-Shuttle Plate Number, and E-Shuttle Name.';
+      setRegError(err);
+      toast.warning(err);
       return;
     }
     setRegistering(true);
@@ -201,69 +207,105 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
         zoneId: newZoneId || null,
         zoneName: matchedZone?.name || null,
       });
-      setRegSuccess(`E-Shuttle Device ${newDeviceId.toUpperCase()} registered successfully!`);
+      const successMsg = `E-Shuttle Device ${newDeviceId.toUpperCase()} registered successfully!`;
+      setRegSuccess(successMsg);
+      toast.success(successMsg);
       setNewDeviceId('');
       setNewSerialNumber('');
       setNewName('');
     } catch (err: any) {
-      setRegError(err?.message || 'Failed to register E-Shuttle.');
+      const errMsg = err?.message || 'Failed to register E-Shuttle.';
+      setRegError(errMsg);
+      toast.error(errMsg);
     } finally {
       setRegistering(false);
     }
   };
 
-  // Handle Deleting E-Bike
-  const handleDeleteBike = async (deviceId: string) => {
-    if (window.confirm(`Are you sure you want to remove E-Shuttle device "${deviceId}"?`)) {
-      try {
-        await deleteEBike(deviceId);
-      } catch (err) {
-        console.error('Delete error:', err);
-      }
-    }
+  // Handle Deleting E-Bike (Protected by Secret PIN)
+  const handleDeleteBike = (deviceId: string) => {
+    promptAdminPin({
+      title: 'Authorize Remove E-Shuttle',
+      actionDescription: `Enter Secret PIN to remove vehicle hardware unit "${deviceId}" from the active fleet`,
+      entityName: deviceId,
+      severity: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteEBike(deviceId);
+          toast.success(`E-Shuttle "${deviceId.toUpperCase()}" removed from fleet.`);
+        } catch (err: any) {
+          console.error('Delete error:', err);
+          toast.error(err?.message || 'Failed to remove E-Shuttle.');
+        }
+      },
+    });
   };
 
-  // Handle Pairing RFID Card
-  const handlePairRfid = async (e: React.FormEvent) => {
+  // Handle Pairing RFID Card (Protected by Secret PIN)
+  const handlePairRfid = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDriverForRfid || !rfidInput) {
+      toast.warning('Please select a driver and enter an RFID Card UID.');
       return;
     }
-    setPairingLoading(true);
-    setPairSuccess('');
+    const drv = drivers.find((d) => d.uid === selectedDriverForRfid);
 
-    try {
-      await pairDriverRfidCard(selectedDriverForRfid, rfidInput);
-      const drv = drivers.find((d) => d.uid === selectedDriverForRfid);
-      setPairSuccess(`RFID Tag [${rfidInput.toUpperCase()}] paired to driver ${drv?.fullName || ''}!`);
-      setRfidInput('');
-    } catch (err) {
-      console.error('Pairing error:', err);
-    } finally {
-      setPairingLoading(false);
-    }
+    promptAdminPin({
+      title: 'Authorize RFID Hardware Pairing',
+      actionDescription: `Enter Secret PIN to pair RFID card "${rfidInput.toUpperCase()}" to driver "${drv?.fullName || selectedDriverForRfid}"`,
+      entityName: drv?.fullName,
+      severity: 'warning',
+      onConfirm: async () => {
+        setPairingLoading(true);
+        setPairSuccess('');
+
+        try {
+          await pairDriverRfidCard(selectedDriverForRfid, rfidInput);
+          const successMsg = `RFID Tag [${rfidInput.toUpperCase()}] paired to driver ${drv?.fullName || ''}!`;
+          setPairSuccess(successMsg);
+          toast.success(successMsg);
+          setRfidInput('');
+        } catch (err: any) {
+          console.error('Pairing error:', err);
+          toast.error(err?.message || 'Failed to pair RFID card.');
+        } finally {
+          setPairingLoading(false);
+        }
+      },
+    });
   };
 
   // Handle Simulated RFID Tap
   const handleSimulateRfidTap = async () => {
     if (!simBikeId || !simRfid) {
-      setSimActionMsg({ text: 'Select an E-Shuttle and enter/select or type an RFID Card UID.', success: false });
+      const err = 'Select an E-Shuttle and enter/select or type an RFID Card UID.';
+      setSimActionMsg({ text: err, success: false });
+      toast.warning(err);
       return;
     }
 
     try {
       if (simRegMode) {
         await sendAdminRegistrationScan(simRfid);
+        const msg = `⚡ ADMIN REGISTRATION SCAN: RFID Card [${simRfid.toUpperCase()}] broadcast from device ${simBikeId}! Sent to Driver RFID Pairing directory without binding driver to bike.`;
         setSimActionMsg({
-          text: `⚡ ADMIN REGISTRATION SCAN: RFID Card [${simRfid.toUpperCase()}] broadcast from device ${simBikeId}! Sent to Driver RFID Pairing directory without binding driver to bike.`,
+          text: msg,
           success: true,
         });
+        toast.info(msg);
       } else {
         const res = await processRfidTapEvent(simBikeId, simRfid);
         setSimActionMsg({ text: res.message, success: res.success });
+        if (res.success) {
+          toast.success(res.message);
+        } else {
+          toast.warning(res.message);
+        }
       }
     } catch (err: any) {
-      setSimActionMsg({ text: err?.message || 'Tap event failed.', success: false });
+      const errMsg = err?.message || 'Tap event failed.';
+      setSimActionMsg({ text: errMsg, success: false });
+      toast.error(errMsg);
     }
   };
 
@@ -272,12 +314,16 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
     if (!simBikeId) return;
     try {
       await updateEBikeGpsLocation(simBikeId, simLat, simLng, simSpeed);
+      const msg = `GPS Telemetry pushed for ${simBikeId}: (${simLat.toFixed(5)}, ${simLng.toFixed(5)}) @ ${simSpeed} km/h`;
       setSimActionMsg({
-        text: `GPS Telemetry pushed for ${simBikeId}: (${simLat.toFixed(5)}, ${simLng.toFixed(5)}) @ ${simSpeed} km/h`,
+        text: msg,
         success: true,
       });
+      toast.info(msg);
     } catch (err: any) {
-      setSimActionMsg({ text: err?.message || 'GPS telemetry update failed.', success: false });
+      const errMsg = err?.message || 'GPS telemetry update failed.';
+      setSimActionMsg({ text: errMsg, success: false });
+      toast.error(errMsg);
     }
   };
 

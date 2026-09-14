@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight, Upload, Sparkles, CheckCircle, ShieldCheck, X, FileCheck, BookOpen } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -17,6 +18,7 @@ import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseSto
 export const DriverProfile: React.FC = () => {
   const { currentUser, driverProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const toast = useToast();
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
   const [faqTab, setFaqTab] = useState<'guide' | 'faqs' | 'routes' | 'history' | 'about'>('faqs');
   const [isUploadingLicense, setIsUploadingLicense] = useState<boolean>(false);
@@ -27,6 +29,15 @@ export const DriverProfile: React.FC = () => {
   const openFaqTab = (tab: 'guide' | 'faqs' | 'routes' | 'history' | 'about') => {
     setFaqTab(tab);
     setIsFaqOpen(true);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.info('Logged out of driver account.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to log out.');
+    }
   };
 
   const handleLicenseCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,9 +70,13 @@ export const DriverProfile: React.FC = () => {
         }
 
         await updateDoc(doc(db, 'drivers', currentUser.uid), updates);
+        toast.success("Driver's license photo uploaded and updated successfully.");
+      } else {
+        toast.error(uploadRes.error || "Failed to upload Driver's License photo.");
       }
     } catch (err: any) {
       console.error('License upload error:', err);
+      toast.error("Failed to process Driver's License image.");
     } finally {
       setIsUploadingLicense(false);
     }
@@ -72,6 +87,7 @@ export const DriverProfile: React.FC = () => {
       await updateDoc(doc(db, 'drivers', currentUser.uid), {
         disconnectNotice: null,
       });
+      toast.info('Notice dismissed.');
     }
   };
 
@@ -411,7 +427,7 @@ export const DriverProfile: React.FC = () => {
       </div>
 
       <button
-        onClick={logout}
+        onClick={handleLogout}
         title="Sign out of driver account"
         className="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-2xl font-bold text-xs shadow-sm transition-colors uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95"
       >

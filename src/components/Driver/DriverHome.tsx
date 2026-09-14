@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { MapView } from '../MapView';
 import { Booking, DriverAvailability, LocationPoint } from '../../types';
 import {
@@ -43,6 +44,7 @@ import { NotificationBellButton } from '../Common/NotificationBellButton';
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const toast = useToast();
 
   const [availability, setAvailability] = useState<DriverAvailability>(
     driverProfile?.availability || 'OFFLINE'
@@ -291,8 +293,15 @@ export const DriverHome: React.FC = () => {
         updatedAt: serverTimestamp(),
       });
       setAvailability(nextState);
+      if (nextState === 'ONLINE') {
+        toast.success('You are ONLINE. Ready to receive shuttle requests.');
+      } else {
+        toast.info('You are OFFLINE.');
+      }
     } catch (err: any) {
-      setActionError(err.message || 'Failed to update availability.');
+      const errMsg = err.message || 'Failed to update availability.';
+      setActionError(errMsg);
+      toast.error(errMsg);
     }
   };
 
@@ -305,9 +314,12 @@ export const DriverHome: React.FC = () => {
     try {
       await acceptBookingAtomic(booking.id, driverProfile);
       setAvailability('BUSY');
+      toast.success(`Ride accepted for ${booking.customerName || 'passenger'}! Heading to pickup.`);
     } catch (err: any) {
       console.error('Accept booking failed:', err);
-      setActionError(err.message || 'Ride already accepted by another driver.');
+      const errMsg = err.message || 'Ride already accepted by another driver.';
+      setActionError(errMsg);
+      toast.error(errMsg);
     } finally {
       setAcceptingId(null);
     }
@@ -321,13 +333,20 @@ export const DriverHome: React.FC = () => {
 
     try {
       await updateBookingStatus(activeRide.id, newStatus, currentUser?.uid);
-      if (newStatus === 'COMPLETED') {
+      if (newStatus === 'DRIVER_ARRIVED') {
+        toast.success('Marked as Arrived at Pickup Station.');
+      } else if (newStatus === 'RIDE_STARTED') {
+        toast.success('Trip Started! Safe driving.');
+      } else if (newStatus === 'COMPLETED') {
         setAvailability('ONLINE');
         setActiveRide(null);
+        toast.success('Shuttle Trip Completed Successfully!');
       }
     } catch (err: any) {
       console.error('Error updating ride status:', err);
-      setActionError(err.message || 'Failed to update ride status.');
+      const errMsg = err.message || 'Failed to update ride status.';
+      setActionError(errMsg);
+      toast.error(errMsg);
     } finally {
       setStatusUpdating(false);
     }

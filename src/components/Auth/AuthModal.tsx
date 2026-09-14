@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
@@ -52,6 +53,7 @@ export const AuthModal: React.FC = () => {
     verifySecurityAnswerAndResetPassword,
   } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const toast = useToast();
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'admin_login'>('login');
   const [roleSelection, setRoleSelection] = useState<'customer' | 'driver'>('customer');
@@ -175,12 +177,16 @@ export const AuthModal: React.FC = () => {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setErrorMsg("Invalid file format. Please upload a picture of your Driver's License (JPG, PNG, WEBP).");
+      const err = "Invalid file format. Please upload a picture of your Driver's License (JPG, PNG, WEBP).";
+      setErrorMsg(err);
+      toast.error(err);
       return;
     }
 
     if (file.size > 8 * 1024 * 1024) {
-      setErrorMsg("Image size exceeds 8MB. Please select a smaller photo of your Driver's License.");
+      const err = "Image size exceeds 8MB. Please select a smaller photo of your Driver's License.";
+      setErrorMsg(err);
+      toast.error(err);
       return;
     }
 
@@ -203,16 +209,21 @@ export const AuthModal: React.FC = () => {
 
       if (uploadRes.success && uploadRes.url) {
         setDriverLicenseCardUrl(uploadRes.url);
+        toast.success("Driver's license uploaded and verified successfully!");
         // Automatically suggest or fill detected legitimate LTO license number if input is currently empty
         if (verificationResult.detectedLicenseNumber && !driverLicenseNumber.trim()) {
           setDriverLicenseNumber(verificationResult.detectedLicenseNumber);
         }
       } else {
-        setErrorMsg(uploadRes.error || "Failed to process Driver's License image.");
+        const err = uploadRes.error || "Failed to process Driver's License image.";
+        setErrorMsg(err);
+        toast.error(err);
       }
     } catch (err: any) {
       console.error("License upload and OCR pre-check error:", err);
-      setErrorMsg("Failed to process Driver's License image. Please try again.");
+      const errMsg = "Failed to process Driver's License image. Please try again.";
+      setErrorMsg(errMsg);
+      toast.error(errMsg);
     } finally {
       setLicenseUploading(false);
       setOcrStatus('');
@@ -256,12 +267,15 @@ export const AuthModal: React.FC = () => {
       const emailErr = getEmailValidationError(trimmedEmail);
       if (emailErr) {
         setErrorMsg(emailErr);
+        toast.warning(emailErr);
         return;
       }
     } else if (trimmedEmail.includes('@')) {
       const emailErr = getEmailValidationError(trimmedEmail);
       if (emailErr) {
-        setErrorMsg(`Invalid email format: ${emailErr}`);
+        const err = `Invalid email format: ${emailErr}`;
+        setErrorMsg(err);
+        toast.warning(err);
         return;
       }
     }
@@ -271,38 +285,48 @@ export const AuthModal: React.FC = () => {
       const nameErr = getFullNameValidationError(fullName);
       if (nameErr) {
         setErrorMsg(nameErr);
+        toast.warning(nameErr);
         return;
       }
 
       const phoneErr = getPhoneValidationError(phone);
       if (phoneErr) {
         setErrorMsg(phoneErr);
+        toast.warning(phoneErr);
         return;
       }
 
       const passErr = getPasswordValidationError(password);
       if (passErr) {
         setErrorMsg(passErr);
+        toast.warning(passErr);
         return;
       }
 
       if (!securityQuestion) {
-        setErrorMsg('Please select a security question for password recovery.');
+        const err = 'Please select a security question for password recovery.';
+        setErrorMsg(err);
+        toast.warning(err);
         return;
       }
       if (!securityAnswer.trim() || securityAnswer.trim().length < 2) {
-        setErrorMsg('Please enter a secret security answer with at least 2 characters.');
+        const err = 'Please enter a secret security answer with at least 2 characters.';
+        setErrorMsg(err);
+        toast.warning(err);
         return;
       }
 
       if (roleSelection === 'driver') {
         if (!driverLicenseNumber.trim()) {
-          setErrorMsg("Official Driver's License Number is required for driver registration.");
+          const err = "Official Driver's License Number is required for driver registration.";
+          setErrorMsg(err);
+          toast.warning(err);
           return;
         }
         const licenseErr = getDriverLicenseValidationError(driverLicenseNumber);
         if (licenseErr) {
           setErrorMsg(licenseErr);
+          toast.warning(licenseErr);
           return;
         }
       }
@@ -323,19 +347,26 @@ export const AuthModal: React.FC = () => {
           cleanIdentifier === 'admin@eshuttle.com' ||
           cleanIdentifier.startsWith('admin@')
         ) {
-          setErrorMsg('Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.');
+          const denied = 'Access Denied: Administrator accounts cannot sign in through this form. Please use the dedicated Administrator Portal.';
+          setErrorMsg(denied);
+          toast.error(denied);
           setLoading(false);
           return;
         }
         await signIn(email, password);
+        toast.success('Signed in successfully! Welcome back.');
       } else if (mode === 'admin_login') {
         await signInAdmin(email, password);
+        toast.success('Administrator authenticated successfully.');
       } else if (mode === 'register') {
         if (roleSelection === 'customer') {
           await signUpCustomer(fullName, email, phone, password, securityQuestion, securityAnswer);
+          toast.success('Passenger account registered successfully! Welcome to E-Shuttle.');
         } else if (roleSelection === 'driver') {
           if (!driverLicenseCardUrl) {
-            setErrorMsg("Driver's License card photo is required for driver registration and admin validation.");
+            const err = "Driver's License card photo is required for driver registration and admin validation.";
+            setErrorMsg(err);
+            toast.error(err);
             setLoading(false);
             return;
           }
@@ -351,11 +382,14 @@ export const AuthModal: React.FC = () => {
             securityQuestion,
             securityAnswer
           );
+          toast.success('Driver application submitted successfully! Welcome to E-Shuttle.');
         }
       }
     } catch (err: any) {
       console.error('Firebase Auth error:', err);
-      setErrorMsg(formatFirebaseError(err));
+      const formatted = formatFirebaseError(err);
+      setErrorMsg(formatted);
+      toast.error(formatted);
     } finally {
       setLoading(false);
     }
@@ -370,6 +404,7 @@ export const AuthModal: React.FC = () => {
     const emailErr = getEmailValidationError(cleanEmail);
     if (emailErr) {
       setErrorMsg(emailErr);
+      toast.warning(emailErr);
       return;
     }
 
@@ -377,7 +412,9 @@ export const AuthModal: React.FC = () => {
     try {
       const res = await getSecurityQuestionByEmail(cleanEmail);
       if (!res.userFound) {
-        setErrorMsg('No registered account was found with this email address. Please double-check your email or sign up.');
+        const err = 'No registered account was found with this email address. Please double-check your email or sign up.';
+        setErrorMsg(err);
+        toast.error(err);
         setLoading(false);
         return;
       }
@@ -387,14 +424,18 @@ export const AuthModal: React.FC = () => {
         setRetrievedQuestion(res.question);
         setForgotAnswer('');
         setForgotStep('question');
+        toast.info('Account found. Please answer your secret security question.');
       } else {
         setPhoneEnding(res.phoneEnding || '');
         setForgotPhoneInput('');
         setForgotStep('legacy_phone');
+        toast.info('Account found. Please verify your registered mobile number.');
       }
     } catch (err: any) {
       console.error('Lookup error:', err);
-      setErrorMsg(formatFirebaseError(err));
+      const formatted = formatFirebaseError(err);
+      setErrorMsg(formatted);
+      toast.error(formatted);
     } finally {
       setLoading(false);
     }
@@ -406,7 +447,9 @@ export const AuthModal: React.FC = () => {
     setSuccessMsg(null);
 
     if (!forgotAnswer.trim()) {
-      setErrorMsg('Please enter your secret security answer.');
+      const err = 'Please enter your secret security answer.';
+      setErrorMsg(err);
+      toast.warning(err);
       return;
     }
 
@@ -414,10 +457,14 @@ export const AuthModal: React.FC = () => {
     try {
       await verifySecurityAnswerAndResetPassword(verifiedEmail, forgotAnswer);
       setForgotStep('success');
-      setSuccessMsg(`Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`);
+      const msg = `Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`;
+      setSuccessMsg(msg);
+      toast.success(msg);
     } catch (err: any) {
       console.error('Verification error:', err);
-      setErrorMsg(err?.message || 'Incorrect security answer. Please check and try again.');
+      const errTxt = err?.message || 'Incorrect security answer. Please check and try again.';
+      setErrorMsg(errTxt);
+      toast.error(errTxt);
     } finally {
       setLoading(false);
     }
@@ -429,7 +476,9 @@ export const AuthModal: React.FC = () => {
     setSuccessMsg(null);
 
     if (!forgotPhoneInput.trim()) {
-      setErrorMsg('Please enter your registered mobile number.');
+      const err = 'Please enter your registered mobile number.';
+      setErrorMsg(err);
+      toast.warning(err);
       return;
     }
 
@@ -437,10 +486,14 @@ export const AuthModal: React.FC = () => {
     try {
       await verifySecurityAnswerAndResetPassword(verifiedEmail, '', forgotPhoneInput);
       setForgotStep('success');
-      setSuccessMsg(`Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`);
+      const msg = `Identity verified! A password reset email has been dispatched to ${verifiedEmail}.`;
+      setSuccessMsg(msg);
+      toast.success(msg);
     } catch (err: any) {
       console.error('Verification error:', err);
-      setErrorMsg(err?.message || 'Mobile number verification failed. Please try again.');
+      const errTxt = err?.message || 'Mobile number verification failed. Please try again.';
+      setErrorMsg(errTxt);
+      toast.error(errTxt);
     } finally {
       setLoading(false);
     }

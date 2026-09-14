@@ -224,6 +224,41 @@ export async function getOrCreateChannel(
   return channelId;
 }
 
+// Helper to deduplicate messages by ID and content signature
+export function deduplicateMessages(msgs: ChatMessage[]): ChatMessage[] {
+  const seenIds = new Set<string>();
+  const result: ChatMessage[] = [];
+
+  for (const m of msgs) {
+    if (!m || !m.text) continue;
+    const msgId = m.id || `${m.senderId}_${m.createdAt}_${m.text}`;
+    if (seenIds.has(msgId)) continue;
+
+    // Check if there is already a message with identical sender, text, and within 3000ms
+    const msgTime = new Date(m.createdAt || Date.now()).getTime();
+    const isDuplicateContent = result.some((existing) => {
+      const existingTime = new Date(existing.createdAt || Date.now()).getTime();
+      return (
+        existing.senderId === m.senderId &&
+        existing.text === m.text &&
+        Math.abs(existingTime - msgTime) < 3500
+      );
+    });
+
+    if (isDuplicateContent) {
+      continue;
+    }
+
+    seenIds.add(msgId);
+    result.push(m);
+  }
+
+  return result.sort(
+    (a, b) =>
+      new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+  );
+}
+
 // 2. Send Message
 export async function sendChatMessage(
   channelId: string,
@@ -249,8 +284,11 @@ export async function sendChatMessage(
   const channelRef = doc(db, 'chatChannels', channelId);
   const messagesColRef = collection(db, 'chatChannels', channelId, 'messages');
 
+  let writeToFirestoreSuccessful = false;
+
   try {
     await addDoc(messagesColRef, msgData);
+    writeToFirestoreSuccessful = true;
 
     // Update parent channel doc with last message and unread count
     const chanSnap = await getDoc(channelRef);
@@ -308,39 +346,41 @@ export async function sendChatMessage(
       });
     }
   } catch (err) {
-    console.warn('Firestore send message failed, writing to local storage:', err);
+    console.warn('Firestore send message failed, falling back to local cache:', err);
   }
 
-  // Always update local cache so messages render immediately
-  const localMsgs = getLocalMessages(channelId);
-  const localMsgObj: ChatMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    channelId,
-    senderId,
-    senderName,
-    senderRole,
-    text: cleanText,
-    createdAt: nowIso,
-    readBy: [senderId],
-  };
-  saveLocalMessages(channelId, [...localMsgs, localMsgObj]);
+  // If Firestore write failed, persist locally as fallback
+  if (!writeToFirestoreSuccessful) {
+    const localMsgs = getLocalMessages(channelId);
+    const localMsgObj: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      channelId,
+      senderId,
+      senderName,
+      senderRole,
+      text: cleanText,
+      createdAt: nowIso,
+      readBy: [senderId],
+    };
+    saveLocalMessages(channelId, deduplicateMessages([...localMsgs, localMsgObj]));
 
-  const localChans = getLocalChannels();
-  const existingChanIdx = localChans.findIndex((c) => c.id === channelId);
-  if (existingChanIdx >= 0) {
-    const chan = localChans[existingChanIdx];
-    chan.lastMessage = cleanText;
-    chan.lastMessageTime = nowIso;
-    const unreads = { ...(chan.unreadCounts || {}) };
-    (chan.participants || []).forEach((p) => {
-      if (p !== senderId) unreads[p] = (unreads[p] || 0) + 1;
-    });
-    chan.unreadCounts = unreads;
-    localChans[existingChanIdx] = chan;
-    saveLocalChannels(localChans);
+    const localChans = getLocalChannels();
+    const existingChanIdx = localChans.findIndex((c) => c.id === channelId);
+    if (existingChanIdx >= 0) {
+      const chan = localChans[existingChanIdx];
+      chan.lastMessage = cleanText;
+      chan.lastMessageTime = nowIso;
+      const unreads = { ...(chan.unreadCounts || {}) };
+      (chan.participants || []).forEach((p) => {
+        if (p !== senderId) unreads[p] = (unreads[p] || 0) + 1;
+      });
+      chan.unreadCounts = unreads;
+      localChans[existingChanIdx] = chan;
+      saveLocalChannels(localChans);
+    }
+
+    notifyLocalSubscribers();
   }
-
-  notifyLocalSubscribers();
 }
 
 // 3. Subscribe to Real-time Messages in a Channel
@@ -352,11 +392,13 @@ export function subscribeToMessages(
   const q = query(messagesColRef, orderBy('createdAt', 'asc'));
 
   let unsubFirestore: (() => void) | null = null;
+  let hasFirestoreData = false;
 
   try {
     unsubFirestore = onSnapshot(
       q,
       (snapshot) => {
+        hasFirestoreData = true;
         const msgs: ChatMessage[] = [];
         snapshot.forEach((d) => {
           const data = d.data();
@@ -377,22 +419,27 @@ export function subscribeToMessages(
           });
         });
 
-        saveLocalMessages(channelId, msgs);
-        callback(msgs);
+        const cleanMsgs = deduplicateMessages(msgs);
+        saveLocalMessages(channelId, cleanMsgs);
+        callback(cleanMsgs);
       },
       (err) => {
         if (err.code !== 'permission-denied') {
           console.error('Error listening to chat messages:', err);
         }
-        callback(getLocalMessages(channelId));
+        if (!hasFirestoreData) {
+          callback(deduplicateMessages(getLocalMessages(channelId)));
+        }
       }
     );
   } catch (err) {
-    callback(getLocalMessages(channelId));
+    callback(deduplicateMessages(getLocalMessages(channelId)));
   }
 
   const localHandler = () => {
-    callback(getLocalMessages(channelId));
+    if (!hasFirestoreData) {
+      callback(deduplicateMessages(getLocalMessages(channelId)));
+    }
   };
   localSubscribers.add(localHandler);
 

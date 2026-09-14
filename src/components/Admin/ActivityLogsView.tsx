@@ -41,12 +41,16 @@ import {
   Key,
   BookOpen,
 } from 'lucide-react';
+import { useAdminPin } from '../../contexts/AdminPinContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ActivityLogsViewProps {
   onOpenTutorial?: () => void;
 }
 
 export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutorial }) => {
+  const { promptAdminPin } = useAdminPin();
+  const toast = useToast();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -136,20 +140,30 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
+    toast.info('Copied to clipboard');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Clear confirmation handler
-  const handleConfirmClear = async () => {
-    setClearing(true);
-    try {
-      await clearAllActivityLogs();
-      setShowClearConfirm(false);
-    } catch (err) {
-      console.error('Failed to clear logs:', err);
-    } finally {
-      setClearing(false);
-    }
+  // Clear confirmation handler (Protected by Secret PIN)
+  const handleConfirmClear = () => {
+    promptAdminPin({
+      title: 'Authorize Purge Activity Audit Trail',
+      actionDescription: 'Enter Secret PIN to permanently wipe all stored activity and audit logs from database',
+      severity: 'danger',
+      onConfirm: async () => {
+        setClearing(true);
+        try {
+          await clearAllActivityLogs();
+          setShowClearConfirm(false);
+          toast.success('Activity audit trail permanently purged.');
+        } catch (err: any) {
+          console.error('Failed to clear logs:', err);
+          toast.error(err?.message || 'Failed to clear activity logs.');
+        } finally {
+          setClearing(false);
+        }
+      },
+    });
   };
 
   // Helper for entity icons
@@ -301,7 +315,10 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
             )}
 
             <button
-              onClick={() => exportLogsToCSV(filteredLogs)}
+              onClick={() => {
+                exportLogsToCSV(filteredLogs);
+                toast.success(`Exported ${filteredLogs.length} activity log(s) to CSV.`);
+              }}
               disabled={filteredLogs.length === 0}
               className="px-3 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
               title="Download filtered logs as spreadsheet (.CSV)"
@@ -311,7 +328,10 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
             </button>
 
             <button
-              onClick={() => exportLogsToJSON(filteredLogs)}
+              onClick={() => {
+                exportLogsToJSON(filteredLogs);
+                toast.success(`Exported ${filteredLogs.length} activity log(s) to JSON.`);
+              }}
               disabled={filteredLogs.length === 0}
               className="px-3 py-2 bg-white border border-[#0D47A1] text-[#0D47A1] hover:bg-blue-50 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
               title="Download filtered logs as structured JSON (.JSON)"

@@ -27,6 +27,7 @@ import {
   sendChatMessage,
   getOrCreateChannel,
   markChannelAsRead,
+  deduplicateMessages,
 } from '../../services/chatService';
 import {
   IncidentTicket,
@@ -177,7 +178,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   // Handle Send Message
   const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!inputText.trim() || !activeChannelId || sending) return;
 
     const textToSend = inputText.trim();
@@ -291,14 +295,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                   <span>Live 2-Way Channel between Passenger, Driver & Admin</span>
                 </div>
 
-                {messages.length === 0 ? (
+                {deduplicateMessages(messages).length === 0 ? (
                   <div className="text-center py-12 text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
                     <p className="text-xs font-bold text-slate-500">No messages yet</p>
                     <p className="text-[10px]">Type a message below to start the conversation.</p>
                   </div>
                 ) : (
-                  messages.map((msg) => {
+                  deduplicateMessages(messages).map((msg) => {
                     const isMe =
                       msg.senderId === currentUserId ||
                       (currentUserRole === 'admin' && (msg.senderRole === 'admin' || msg.senderId === 'admin'));
@@ -356,6 +360,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 {quickChips.map((chip, idx) => (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => setInputText(chip)}
                     className="px-2.5 py-1 bg-[#E3F2FD] hover:bg-[#0D47A1] hover:text-white text-[#0D47A1] border border-[#0D47A1]/30 rounded-full text-[10px] font-bold shrink-0 transition-colors"
                   >

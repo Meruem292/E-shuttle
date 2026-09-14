@@ -30,8 +30,12 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { LocationPickerMap } from '../Common/LocationPickerMap';
+import { useAdminPin } from '../../contexts/AdminPinContext';
+import { useToast } from '../../contexts/ToastContext';
 
 export const ZoneManagement: React.FC = () => {
+  const { promptAdminPin } = useAdminPin();
+  const toast = useToast();
   const [zones, setZones] = useState<OperationalZone[]>([]);
   const [stations, setStations] = useState<ShuttleStation[]>([]);
   const [ebikes, setEbikes] = useState<EBikeDevice[]>([]);
@@ -300,14 +304,18 @@ export const ZoneManagement: React.FC = () => {
     setFormError(null);
 
     if (!formName.trim()) {
-      setFormError('Please enter a zone name.');
+      const err = 'Please enter a zone name.';
+      setFormError(err);
+      toast.warning(err);
       return;
     }
 
     const lat = parseFloat(formLat);
     const lng = parseFloat(formLng);
     if (isNaN(lat) || isNaN(lng)) {
-      setFormError('Please provide valid latitude and longitude coordinates.');
+      const err = 'Please provide valid latitude and longitude coordinates.';
+      setFormError(err);
+      toast.warning(err);
       return;
     }
 
@@ -321,7 +329,9 @@ export const ZoneManagement: React.FC = () => {
           centerLongitude: lng,
           radiusMeters: Number(formRadius) || 1500,
         });
-        setNotification(`Zone "${formName}" updated.`);
+        const msg = `Zone "${formName}" updated successfully.`;
+        setNotification(msg);
+        toast.success(msg);
       } else {
         await addOperationalZone({
           name: formName.trim(),
@@ -332,7 +342,9 @@ export const ZoneManagement: React.FC = () => {
           radiusMeters: Number(formRadius) || 1500,
           isActive: true,
         });
-        setNotification(`New Zone "${formName}" created.`);
+        const msg = `New Zone "${formName}" created successfully.`;
+        setNotification(msg);
+        toast.success(msg);
       }
 
       setShowAddModal(false);
@@ -342,7 +354,9 @@ export const ZoneManagement: React.FC = () => {
       }
       setTimeout(() => setNotification(null), 3000);
     } catch (err: any) {
-      setFormError(err.message || 'Error saving zone');
+      const errMsg = err.message || 'Error saving zone';
+      setFormError(errMsg);
+      toast.error(errMsg);
     } finally {
       setFormSaving(false);
     }
@@ -351,24 +365,40 @@ export const ZoneManagement: React.FC = () => {
   const handleToggleZoneActive = async (zone: OperationalZone) => {
     const nextStatus = zone.isActive === false;
     await updateOperationalZone(zone.id, { isActive: nextStatus });
-    setNotification(`Zone "${zone.name}" is now ${nextStatus ? 'Active' : 'Disabled'}.`);
+    const msg = `Zone "${zone.name}" is now ${nextStatus ? 'Active' : 'Disabled'}.`;
+    setNotification(msg);
+    toast.info(msg);
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = () => {
     if (!zoneToDelete) return;
-    setIsDeleting(true);
-    try {
-      await deleteOperationalZone(zoneToDelete.id, zoneToDelete.name);
-      setNotification(`Zone "${zoneToDelete.name}" deleted.`);
-      if (selectedZone?.id === zoneToDelete.id) setSelectedZone(null);
-      setZoneToDelete(null);
-    } catch (err: any) {
-      setNotification(`Error deleting zone: ${err.message}`);
-    } finally {
-      setIsDeleting(false);
-      setTimeout(() => setNotification(null), 3000);
-    }
+    const target = zoneToDelete;
+
+    promptAdminPin({
+      title: 'Authorize Delete Service Zone',
+      actionDescription: `Enter Secret PIN to permanently delete operational service zone "${target.name}"`,
+      entityName: target.name,
+      severity: 'danger',
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          await deleteOperationalZone(target.id, target.name);
+          const msg = `Zone "${target.name}" deleted.`;
+          setNotification(msg);
+          toast.success(msg);
+          if (selectedZone?.id === target.id) setSelectedZone(null);
+          setZoneToDelete(null);
+        } catch (err: any) {
+          const errMsg = `Error deleting zone: ${err.message}`;
+          setNotification(errMsg);
+          toast.error(errMsg);
+        } finally {
+          setIsDeleting(false);
+          setTimeout(() => setNotification(null), 3000);
+        }
+      },
+    });
   };
 
   const handleFocusZone = (zone: OperationalZone) => {

@@ -27,12 +27,16 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { LocationPickerMap } from '../Common/LocationPickerMap';
+import { useAdminPin } from '../../contexts/AdminPinContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface StationManagementProps {
   onStationSelectForMap?: (station: ShuttleStation) => void;
 }
 
 export const StationManagement: React.FC<StationManagementProps> = () => {
+  const { promptAdminPin } = useAdminPin();
+  const toast = useToast();
   const [stations, setStations] = useState<ShuttleStation[]>([]);
   const [zones, setZones] = useState<OperationalZone[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -250,12 +254,18 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
         const lat = parseFloat(item.lat);
         const lng = parseFloat(item.lon);
         mapInstanceRef.current.setView([lat, lng], 16, { animate: true });
-        setNotification(`Found "${item.display_name.split(',')[0]}". Pan or tap to pin!`);
+        const foundMsg = `Found "${item.display_name.split(',')[0]}". Pan or tap to pin!`;
+        setNotification(foundMsg);
+        toast.info(foundMsg);
       } else {
-        setNotification(`No matching locations found for "${mapSearchQuery}".`);
+        const notFound = `No matching locations found for "${mapSearchQuery}".`;
+        setNotification(notFound);
+        toast.warning(notFound);
       }
     } catch (err: any) {
-      setNotification(`Search error: ${err.message}`);
+      const errMsg = `Search error: ${err.message}`;
+      setNotification(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsSearchingLocation(false);
     }
@@ -455,14 +465,18 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
   const handleSaveStation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formAddress.trim()) {
-      setNotification('Please enter a station name and address.');
+      const err = 'Please enter a station name and address.';
+      setNotification(err);
+      toast.warning(err);
       return;
     }
 
     const lat = parseFloat(formLat);
     const lng = parseFloat(formLng);
     if (isNaN(lat) || isNaN(lng)) {
-      setNotification('Please enter valid numeric latitude and longitude coordinates.');
+      const err = 'Please enter valid numeric latitude and longitude coordinates.';
+      setNotification(err);
+      toast.warning(err);
       return;
     }
 
@@ -488,7 +502,9 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
           description: formDescription.trim(),
           isActive: formIsActive,
         });
-        setNotification(`Station "${formName}" updated successfully!`);
+        const msg = `Station "${formName}" updated successfully!`;
+        setNotification(msg);
+        toast.success(msg);
       } else {
         await addShuttleStation({
           name: formName.trim(),
@@ -505,12 +521,16 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
           description: formDescription.trim(),
           isActive: formIsActive,
         });
-        setNotification(`Station "${formName}" pinned successfully! Users in this zone can now book to/from this point.`);
+        const msg = `Station "${formName}" pinned successfully! Users in this zone can now book to/from this point.`;
+        setNotification(msg);
+        toast.success(msg);
       }
       handleCloseForm();
     } catch (err: any) {
       console.error('Error saving station:', err);
-      setNotification(`Failed to save station: ${err.message || 'Unknown error'}`);
+      const errMsg = `Failed to save station: ${err.message || 'Unknown error'}`;
+      setNotification(errMsg);
+      toast.error(errMsg);
     } finally {
       setSubmitting(false);
       setTimeout(() => setNotification(null), 4000);
@@ -521,10 +541,13 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
   const handleToggleStatus = async (st: ShuttleStation) => {
     try {
       await updateShuttleStation(st.id, { isActive: !st.isActive });
-      setNotification(`Station "${st.name}" is now ${!st.isActive ? 'ACTIVE' : 'INACTIVE'}.`);
+      const msg = `Station "${st.name}" is now ${!st.isActive ? 'ACTIVE' : 'INACTIVE'}.`;
+      setNotification(msg);
+      toast.info(msg);
       setTimeout(() => setNotification(null), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error toggling status:', err);
+      toast.error(err?.message || 'Failed to update station status.');
     }
   };
 
@@ -533,23 +556,36 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
     setStationToDelete({ id, name });
   };
 
-  // Perform Confirmed Deletion
-  const handleConfirmDeleteStation = async () => {
+  // Perform Confirmed Deletion (Protected by Secret PIN)
+  const handleConfirmDeleteStation = () => {
     if (!stationToDelete) return;
     const { id, name } = stationToDelete;
-    setIsDeleting(true);
-    try {
-      await deleteShuttleStation(id);
-      setNotification(`Station "${name}" was permanently removed.`);
-      if (selectedStation?.id === id) setSelectedStation(null);
-      setStationToDelete(null);
-    } catch (err: any) {
-      console.error('Error deleting station:', err);
-      setNotification(`Error deleting station: ${err.message || 'Unknown error'}`);
-    } finally {
-      setIsDeleting(false);
-      setTimeout(() => setNotification(null), 3000);
-    }
+
+    promptAdminPin({
+      title: 'Authorize Delete Shuttle Station',
+      actionDescription: `Enter Secret PIN to permanently remove designated station "${name}" from route navigation`,
+      entityName: name,
+      severity: 'danger',
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          await deleteShuttleStation(id);
+          const msg = `Station "${name}" was permanently removed.`;
+          setNotification(msg);
+          toast.success(msg);
+          if (selectedStation?.id === id) setSelectedStation(null);
+          setStationToDelete(null);
+        } catch (err: any) {
+          console.error('Error deleting station:', err);
+          const errMsg = `Error deleting station: ${err.message || 'Unknown error'}`;
+          setNotification(errMsg);
+          toast.error(errMsg);
+        } finally {
+          setIsDeleting(false);
+          setTimeout(() => setNotification(null), 3000);
+        }
+      },
+    });
   };
 
   return (

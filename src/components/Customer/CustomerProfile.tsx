@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { LogOut, HelpCircle, Info, ChevronRight, Bus, BookOpen } from 'lucide-react';
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
@@ -12,8 +13,18 @@ import cctLogo from '../../images/cct_logo.jpg';
 export const CustomerProfile: React.FC = () => {
   const { userProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const toast = useToast();
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
   const [faqTab, setFaqTab] = useState<'guide' | 'faqs' | 'routes' | 'history' | 'about'>('faqs');
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.info('Logged out successfully.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to log out.');
+    }
+  };
 
   const openFaqTab = (tab: 'guide' | 'faqs' | 'routes' | 'history' | 'about') => {
     setFaqTab(tab);
@@ -171,7 +182,7 @@ export const CustomerProfile: React.FC = () => {
 
       {/* Logout Button */}
       <button
-        onClick={logout}
+        onClick={handleLogout}
         title="Sign out of your account on this device"
         className="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-2xl font-bold text-xs shadow-sm transition-colors flex items-center justify-center gap-2 active:scale-95 uppercase tracking-wider"
       >

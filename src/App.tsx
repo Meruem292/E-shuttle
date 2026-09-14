@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NativeBackProvider, useBackHandler } from './contexts/NativeBackContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { AdminPinProvider } from './contexts/AdminPinContext';
 import { AuthModal } from './components/Auth/AuthModal';
 import { BottomNav } from './components/BottomNav';
 import { HomeMapBooking } from './components/Customer/HomeMapBooking';
@@ -170,10 +172,14 @@ const MainAppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NativeBackProvider>
-        <MainAppContent />
-      </NativeBackProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <NativeBackProvider>
+          <AdminPinProvider>
+            <MainAppContent />
+          </AdminPinProvider>
+        </NativeBackProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
