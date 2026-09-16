@@ -162,13 +162,13 @@ export async function getOrCreateChannel(
     defaultTitle = `${creator.name} & ${target?.name || 'Driver'}`;
     defaultSubtitle = 'Direct Chat';
   } else if (type === 'user_admin') {
-    const custName = creator.role === 'admin' ? target?.name || 'Passenger' : creator.name;
+    const custName = creator.role === 'admin' ? target?.name || 'User' : creator.name;
     defaultTitle = titleOverride || `Customer Support (${custName})`;
-    defaultSubtitle = '2-Way Admin Help Channel';
+    defaultSubtitle = 'Admin Support';
   } else if (type === 'driver_admin') {
     const drName = creator.role === 'admin' ? target?.name || 'Driver' : creator.name;
     defaultTitle = titleOverride || `Driver Dispatch Support (${drName})`;
-    defaultSubtitle = '2-Way Admin Dispatch Channel';
+    defaultSubtitle = 'Admin Dispatch';
   }
 
   const unreadCounts: Record<string, number> = {};

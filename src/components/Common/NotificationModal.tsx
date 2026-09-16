@@ -12,6 +12,9 @@ import {
   Info,
   Radio,
   Volume2,
+  ChevronRight,
+  ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   AppNotificationItem,
@@ -22,6 +25,7 @@ import {
   subscribeToNotifications,
   playPickupChime,
 } from '../../services/notificationService';
+import { openSupportTicketsModal } from '../../services/ticketService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface NotificationModalProps {
@@ -30,31 +34,35 @@ interface NotificationModalProps {
 }
 
 export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, role } = useAuth();
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const unsub = subscribeToNotifications(currentUser?.uid, (items) => {
+    const unsub = subscribeToNotifications(currentUser?.uid, role || undefined, (items) => {
       setNotifications(items);
     });
     return () => unsub();
-  }, [isOpen, currentUser?.uid]);
+  }, [isOpen, currentUser?.uid, role]);
 
   // When modal is opened, user is looking at notifications, but allow manual or auto-mark
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const handleMarkAllRead = () => {
-    markAllNotificationsAsRead(currentUser?.uid);
+    markAllNotificationsAsRead(currentUser?.uid, role || undefined);
   };
 
   const handleClearAll = () => {
-    clearAllNotifications(currentUser?.uid);
+    clearAllNotifications(currentUser?.uid, role || undefined);
   };
 
   const handleNotificationClick = (item: AppNotificationItem) => {
     if (!item.read) {
-      markNotificationAsRead(item.id, currentUser?.uid);
+      markNotificationAsRead(item.id, currentUser?.uid, role || undefined);
+    }
+    if (item.type === 'support' || item.meta?.ticketId || item.meta?.ticketNumber) {
+      onClose();
+      openSupportTicketsModal(item.meta?.ticketId || item.meta?.ticketNumber);
     }
   };
 
@@ -89,7 +97,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
       case 'ride_started':
         return <Bike className="w-5 h-5 text-emerald-600" />;
       case 'support':
-        return <MessageSquare className="w-5 h-5 text-sky-600" />;
+        return <ShieldAlert className="w-5 h-5 text-rose-600 animate-pulse" />;
       default:
         return <Info className="w-5 h-5 text-slate-500" />;
     }
@@ -119,7 +127,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-blue-100 font-medium">Shuttle proximity, rides & updates</p>
+              <p className="text-[11px] text-blue-100 font-medium">Shuttle proximity, rides & dispatch updates</p>
             </div>
           </div>
 
@@ -174,73 +182,114 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
               </div>
               <p className="text-xs font-bold text-slate-600">You're all caught up!</p>
               <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                No active notifications right now. Alerts for shuttle proximity and boarding will appear here.
+                No active notifications right now. Incident alerts and transit notices will appear here.
               </p>
             </div>
           ) : (
-            notifications.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handleNotificationClick(item)}
-                className={`pt-2.5 first:pt-0 cursor-pointer rounded-2xl p-3 transition-all border ${
-                  !item.read
-                    ? 'bg-white border-[#0D47A1]/30 shadow-sm'
-                    : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                      !item.read ? 'bg-[#E3F2FD] border border-[#0D47A1]/20' : 'bg-slate-100'
-                    }`}
-                  >
-                    {getIcon(item.type)}
-                  </div>
+            notifications.map((item) => {
+              const isSupportTicket = item.type === 'support' || Boolean(item.meta?.ticketId);
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <h4
-                        className={`text-xs truncate ${
-                          !item.read ? 'font-black text-[#0D47A1]' : 'font-bold text-slate-700'
-                        }`}
-                      >
-                        {item.title}
-                      </h4>
-                      <span className="text-[10px] text-slate-400 shrink-0 font-medium">
-                        {formatTime(item.timestamp)}
-                      </span>
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => handleNotificationClick(item)}
+                  className={`pt-2.5 first:pt-0 cursor-pointer rounded-2xl p-3 transition-all border ${
+                    !item.read
+                      ? isSupportTicket
+                        ? 'bg-rose-50/70 border-rose-300 shadow-sm'
+                        : 'bg-white border-[#0D47A1]/30 shadow-sm'
+                      : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                        !item.read
+                          ? isSupportTicket
+                            ? 'bg-rose-100 border border-rose-300 text-rose-600'
+                            : 'bg-[#E3F2FD] border border-[#0D47A1]/20'
+                          : 'bg-slate-100'
+                      }`}
+                    >
+                      {getIcon(item.type)}
                     </div>
 
-                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">{item.message}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <h4
+                          className={`text-xs truncate ${
+                            !item.read
+                              ? isSupportTicket
+                                ? 'font-black text-rose-700'
+                                : 'font-black text-[#0D47A1]'
+                              : 'font-bold text-slate-700'
+                          }`}
+                        >
+                          {item.title}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                          {formatTime(item.timestamp)}
+                        </span>
+                      </div>
 
-                    {/* Proximity / Meta chips */}
-                    {item.type === 'proximity_300m' || item.meta?.distanceMeters ? (
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
-                          🎯 300m Proximity Trigger
-                        </span>
-                      </div>
-                    ) : item.type === 'multi_passenger' ? (
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase tracking-wider bg-blue-100 text-[#0D47A1] px-2 py-0.5 rounded-full border border-blue-200">
-                          👥 Multi-Passenger Boarding
-                        </span>
-                      </div>
-                    ) : null}
+                      <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">{item.message}</p>
+
+                      {/* Incident Action Bar */}
+                      {isSupportTicket && (
+                        <div className="mt-2.5 pt-2 border-t border-rose-200/60 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-rose-600 text-white px-2 py-0.5 rounded-full shadow-xs">
+                              {item.meta?.priority ? `${item.meta.priority.toUpperCase()} Incident` : 'Incident Alert'}
+                            </span>
+                            {item.meta?.ticketNumber && (
+                              <span className="text-[9px] font-mono font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                #{item.meta.ticketNumber}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNotificationClick(item);
+                            }}
+                            className="px-2.5 py-1 bg-[#0D47A1] hover:bg-[#1565C0] text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-1 active:scale-95 shrink-0"
+                          >
+                            <span>Resolve Now</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Proximity / Meta chips */}
+                      {item.type === 'proximity_300m' || item.meta?.distanceMeters ? (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                            🎯 300m Proximity Trigger
+                          </span>
+                        </div>
+                      ) : item.type === 'multi_passenger' ? (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-blue-100 text-[#0D47A1] px-2 py-0.5 rounded-full border border-blue-200">
+                            👥 Multi-User Boarding
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {!item.read && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0 mt-1 animate-pulse" />
+                    )}
                   </div>
-
-                  {!item.read && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0 mt-1" />
-                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
         {/* Footer */}
         <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-          <span>Real-time Transit Notifications</span>
+          <span>Real-time Transit & Safety Notifications</span>
           <button
             onClick={() => {
               handleMarkAllRead();
@@ -255,3 +304,4 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
     </div>
   );
 };
+

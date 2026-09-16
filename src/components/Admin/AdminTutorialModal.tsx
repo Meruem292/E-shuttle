@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   ChevronRight,
@@ -27,7 +27,7 @@ interface AdminTutorialModalProps {
   initialStepIndex?: number;
 }
 
-type GuideRole = 'admin' | 'passenger' | 'driver';
+type GuideRole = 'admin' | 'user' | 'driver';
 
 interface SimpleStep {
   id: string;
@@ -51,11 +51,23 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
 }) => {
   const [selectedRole, setSelectedRole] = useState<GuideRole>('admin');
   const [currentStep, setCurrentStep] = useState<number>(initialStepIndex);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTop = () => {
+    if (contentRef.current) {
+      contentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    scrollToTop();
+  }, [currentStep, selectedRole]);
 
   useBackHandler(
     isOpen && currentStep > 0,
     () => {
       setCurrentStep((prev) => prev - 1);
+      scrollToTop();
       return true;
     },
     35,
@@ -75,6 +87,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
   useEffect(() => {
     if (initialStepIndex >= 0) {
       setCurrentStep(initialStepIndex);
+      scrollToTop();
     }
   }, [initialStepIndex, isOpen]);
 
@@ -86,7 +99,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       id: 'step-map',
       stepNumber: 1,
       title: 'Live Map & Active Rides',
-      purpose: 'See where e-shuttles are moving and watch passenger ride requests in real-time.',
+      purpose: 'See where e-shuttles are moving and watch user ride requests in real-time.',
       badge: 'Step 1 of 5',
       icon: <Compass className="w-6 h-6 text-[#0D47A1]" />,
       colorTheme: 'bg-blue-50 border-blue-200 text-[#0D47A1]',
@@ -98,12 +111,12 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
           desc: 'Watch active e-shuttles roam along Tagaytay routes with real-time GPS locations.',
         },
         {
-          title: 'View Passenger Requests',
-          desc: 'Incoming ride bookings from commuters appear instantly on the map with their pickup stop.',
+          title: 'View User Requests',
+          desc: 'Incoming ride bookings from users appear instantly on the map with their pickup stop.',
         },
         {
           title: 'Inspect Shuttle Details',
-          desc: 'Click on any shuttle marker to see its plate number, driver, and current passenger count.',
+          desc: 'Click on any shuttle marker to see its plate number, driver, and current user count.',
         },
       ],
       quickTip: 'The map updates automatically with live GPS without needing to refresh your page.',
@@ -129,7 +142,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
         },
         {
           title: 'Approve or Suspend',
-          desc: 'Switch driver status to Approved to allow them to accept passenger trips on the road.',
+          desc: 'Switch driver status to Approved to allow them to accept user trips on the road.',
         },
       ],
       quickTip: 'Our automatic license scanner helps verify official LTO credentials when reviewing documents.',
@@ -138,7 +151,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       id: 'step-stations',
       stepNumber: 3,
       title: 'Stops & Stations',
-      purpose: 'Manage designated passenger pickup and drop-off points along Tagaytay roads.',
+      purpose: 'Manage designated user pickup and drop-off points along Tagaytay roads.',
       badge: 'Step 3 of 5',
       icon: <MapPin className="w-6 h-6 text-indigo-600" />,
       colorTheme: 'bg-indigo-50 border-indigo-200 text-indigo-800',
@@ -151,7 +164,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
         },
         {
           title: 'Add New Stop',
-          desc: 'Click "+ Add Station" to create a new pickup location so passengers can select it when requesting rides.',
+          desc: 'Click "+ Add Station" to create a new pickup location so users can select it when requesting rides.',
         },
         {
           title: 'Adjust Pin Location',
@@ -163,8 +176,8 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
     {
       id: 'step-incidents',
       stepNumber: 4,
-      title: 'Passenger Safety & Help',
-      purpose: 'Respond quickly to passenger emergency SOS alerts and support inquiries.',
+      title: 'User Safety & Help',
+      purpose: 'Respond quickly to user emergency SOS alerts and support inquiries.',
       badge: 'Step 4 of 5',
       icon: <AlertTriangle className="w-6 h-6 text-rose-600" />,
       colorTheme: 'bg-rose-50 border-rose-200 text-rose-800',
@@ -173,11 +186,11 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       points: [
         {
           title: 'Emergency Alerts',
-          desc: 'Urgent passenger SOS reports appear immediately with GPS coordinates and contact numbers.',
+          desc: 'Urgent user SOS reports appear immediately with GPS coordinates and contact numbers.',
         },
         {
           title: 'Provide Fast Support',
-          desc: 'Contact the rider or driver right away to assist with lost items, delays, or emergency help.',
+          desc: 'Contact the user or driver right away to assist with lost items, delays, or emergency help.',
         },
         {
           title: 'Resolve Tickets',
@@ -214,14 +227,14 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
     },
   ];
 
-  // 2. PASSENGER GUIDE (3 simple steps)
-  const passengerSteps: SimpleStep[] = [
+  // 2. USER GUIDE (3 simple steps)
+  const userSteps: SimpleStep[] = [
     {
-      id: 'p-step-1',
+      id: 'u-step-1',
       stepNumber: 1,
       title: 'Choose Your Pickup & Drop-off',
       purpose: 'Select where you are and where you want to go in Tagaytay.',
-      badge: 'Passenger Step 1',
+      badge: 'User Step 1',
       icon: <MapPin className="w-6 h-6 text-[#0D47A1]" />,
       colorTheme: 'bg-blue-50 border-blue-200 text-[#0D47A1]',
       points: [
@@ -230,18 +243,18 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
           desc: 'Choose from official landmark stops like City Hall, Olivarez, or school terminals.',
         },
         {
-          title: 'Set Number of Passengers',
+          title: 'Set Number of Users',
           desc: 'Specify how many seats you need so the driver knows your group size.',
         },
       ],
       quickTip: 'Stops are conveniently located along main travel corridors.',
     },
     {
-      id: 'p-step-2',
+      id: 'u-step-2',
       stepNumber: 2,
       title: 'Request Free Shuttle Ride',
-      purpose: 'Tagaytay E-Shuttle is 100% free of charge for all commuters.',
-      badge: 'Passenger Step 2',
+      purpose: 'Tagaytay E-Shuttle is 100% free of charge for all users.',
+      badge: 'User Step 2',
       icon: <Bus className="w-6 h-6 text-emerald-600" />,
       colorTheme: 'bg-emerald-50 border-emerald-200 text-emerald-800',
       points: [
@@ -257,11 +270,11 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       quickTip: 'You can cancel anytime if your travel plans change.',
     },
     {
-      id: 'p-step-3',
+      id: 'u-step-3',
       stepNumber: 3,
       title: 'Track Shuttle & Hop On',
       purpose: 'Watch your shuttle arrive on the live map and enjoy a comfortable ride.',
-      badge: 'Passenger Step 3',
+      badge: 'User Step 3',
       icon: <Navigation className="w-6 h-6 text-indigo-600" />,
       colorTheme: 'bg-indigo-50 border-indigo-200 text-indigo-800',
       points: [
@@ -298,24 +311,24 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
           desc: 'Verify that your e-shuttle unit ID and plate number match your assigned vehicle.',
         },
       ],
-      quickTip: 'Make sure your device has location/GPS enabled so passengers can see your arrival.',
+      quickTip: 'Make sure your device has location/GPS enabled so users can see your arrival.',
     },
     {
       id: 'd-step-2',
       stepNumber: 2,
-      title: 'Accept Passenger Pickups',
-      purpose: 'Receive ride requests from waiting commuters along your route.',
+      title: 'Accept User Pickups',
+      purpose: 'Receive ride requests from waiting users along your route.',
       badge: 'Driver Step 2',
       icon: <Bus className="w-6 h-6 text-[#0D47A1]" />,
       colorTheme: 'bg-blue-50 border-blue-200 text-[#0D47A1]',
       points: [
         {
           title: 'Station Ride Notifications',
-          desc: 'When a commuter books a ride at a stop ahead, you will hear a chime with their location.',
+          desc: 'When a user books a ride at a stop ahead, you will hear a chime with their location.',
         },
         {
-          title: 'Pick Up Riders',
-          desc: 'Pull into the designated station loading bay and welcome the passengers aboard.',
+          title: 'Pick Up Users',
+          desc: 'Pull into the designated station loading bay and welcome the users aboard.',
         },
       ],
       quickTip: 'Follow standard city speed limits and observe pedestrian crosswalks at all times.',
@@ -324,18 +337,18 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       id: 'd-step-3',
       stepNumber: 3,
       title: 'Drop Off & Complete Trip',
-      purpose: 'Alight passengers safely and prepare for subsequent pickups.',
+      purpose: 'Alight users safely and prepare for subsequent pickups.',
       badge: 'Driver Step 3',
       icon: <CheckCircle2 className="w-6 h-6 text-emerald-600" />,
       colorTheme: 'bg-emerald-50 border-emerald-200 text-emerald-800',
       points: [
         {
           title: 'Arrive at Destination Stop',
-          desc: 'Stop at the passenger’s requested station and let them disembark safely.',
+          desc: 'Stop at the user’s requested station and let them disembark safely.',
         },
         {
           title: 'Tap "Complete Trip"',
-          desc: 'Mark the trip finished so your shuttle is immediately ready for the next commuter.',
+          desc: 'Mark the trip finished so your shuttle is immediately ready for the next user.',
         },
       ],
       quickTip: 'Tap out or go Offline when taking a meal break or ending your daily shift.',
@@ -345,8 +358,8 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
   const activeStepList =
     selectedRole === 'admin'
       ? adminSteps
-      : selectedRole === 'passenger'
-      ? passengerSteps
+      : selectedRole === 'user'
+      ? userSteps
       : driverSteps;
 
   const currentStepData = activeStepList[Math.min(currentStep, activeStepList.length - 1)];
@@ -354,17 +367,20 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
   const handleRoleChange = (role: GuideRole) => {
     setSelectedRole(role);
     setCurrentStep(0);
+    scrollToTop();
   };
 
   const handlePrev = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
+      scrollToTop();
     }
   };
 
   const handleNext = () => {
     if (currentStep < activeStepList.length - 1) {
       setCurrentStep(currentStep + 1);
+      scrollToTop();
     } else {
       onClose();
     }
@@ -427,15 +443,15 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
             </button>
 
             <button
-              onClick={() => handleRoleChange('passenger')}
+              onClick={() => handleRoleChange('user')}
               className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
-                selectedRole === 'passenger'
+                selectedRole === 'user'
                   ? 'bg-[#0D47A1] text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
               }`}
             >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Rider Guide ({passengerSteps.length} Steps)</span>
+              <span>User Guide ({userSteps.length} Steps)</span>
             </button>
 
             <button
@@ -453,7 +469,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <div ref={contentRef} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           {/* Active Step Card */}
           <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-white shadow-sm space-y-4">
             {/* Step Header */}
@@ -542,7 +558,10 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
             {activeStepList.map((_, idx) => (
               <button
                 key={idx}
-                onClick={() => setCurrentStep(idx)}
+                onClick={() => {
+                  setCurrentStep(idx);
+                  scrollToTop();
+                }}
                 className={`h-2 rounded-full transition-all ${
                   idx === currentStep
                     ? 'w-6 bg-[#0D47A1]'

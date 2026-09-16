@@ -562,7 +562,7 @@ void loop() {
       drawOledDisplay("ADMIN REG MODE", "SWIPE CARD NOW", "BROADCAST TO WEB", "NO VEHICLE ASSIGN");
     } else {
       Serial.println("\\n[NORMAL E-SHUTTLE MODE] Returned to standard E-Shuttle Operation.");
-      drawOledDisplay("E-SHUTTLE", "OPERATIONAL", "SWIPE DRIVER RFID", "READY FOR PASSENGERS");
+      drawOledDisplay("E-SHUTTLE", "OPERATIONAL", "SWIPE DRIVER RFID", "READY FOR USERS");
     }
   }
 

@@ -152,7 +152,7 @@ export async function createBooking(
     entityType: 'RIDE',
     entityId: docRef.id,
     entityName: `Ride #${docRef.id.slice(-6).toUpperCase()}`,
-    summary: `Passenger "${customerName}" requested ride from "${pickup.address}" to "${destination.address}" (Fare: ₱${estimatedFare})`,
+    summary: `User "${customerName}" requested ride from "${pickup.address}" to "${destination.address}" (Fare: ₱${estimatedFare})`,
     details: {
       summary: `Booking created: ${distanceKm} km, ~${estimatedDurationMinutes} mins`,
       after: {
@@ -419,7 +419,7 @@ export async function submitRideRating(
     entityType: 'RIDE',
     entityId: bookingId,
     entityName: `Ride #${bookingId.slice(-6).toUpperCase()}`,
-    summary: `Passenger rated ride #${bookingId.slice(-6).toUpperCase()} ${rating}★${comment ? ` - "${comment}"` : ''}`,
+    summary: `User rated ride #${bookingId.slice(-6).toUpperCase()} ${rating}★${comment ? ` - "${comment}"` : ''}`,
     details: {
       summary: `Customer feedback recorded for driver ${driverId}`,
       after: { rating, comment, bookingId, driverId },

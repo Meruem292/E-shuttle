@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   HelpCircle,
   Info,
@@ -43,9 +43,16 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
 }) => {
   const { logoUrl: appLogo } = useAppLogo();
   const [activeTab, setActiveTab] = useState<'guide' | 'faqs' | 'routes' | 'history' | 'about'>(defaultTab);
-  const [guideRole, setGuideRole] = useState<'passenger' | 'driver'>('passenger');
+  const [guideRole, setGuideRole] = useState<'user' | 'driver'>('user');
   const [expandedFaq, setExpandedFaq] = useState<string | null>('free_shuttle');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeTab, guideRole]);
 
   useBackHandler(
     isOpen,
@@ -249,7 +256,7 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
           {/* TAB 0: HOW TO USE (SIMPLE WALKTHROUGH) */}
           {activeTab === 'guide' && (
             <div className="space-y-4">
@@ -257,15 +264,15 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
               <div className="flex items-center justify-center gap-2 p-1 bg-white border border-[#0D47A1]/20 rounded-2xl shadow-xs">
                 <button
                   type="button"
-                  onClick={() => setGuideRole('passenger')}
+                  onClick={() => setGuideRole('user')}
                   className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    guideRole === 'passenger'
+                    guideRole === 'user'
                       ? 'bg-[#0D47A1] text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <MapPin className="w-3.5 h-3.5" />
-                  <span>Passenger / Commuter Guide</span>
+                  <span>User Guide</span>
                 </button>
                 <button
                   type="button"
@@ -281,7 +288,7 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
                 </button>
               </div>
 
-              {guideRole === 'passenger' ? (
+              {guideRole === 'user' ? (
                 <div className="space-y-3">
                   <div className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 space-y-1 shadow-sm">
                     <span className="bg-amber-400 text-slate-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
@@ -336,9 +343,9 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
                     <span className="bg-blue-100 text-blue-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-blue-300">
                       Step 2
                     </span>
-                    <h4 className="text-sm font-black text-[#0D47A1]">Receive Passenger Pickups</h4>
+                    <h4 className="text-sm font-black text-[#0D47A1]">Receive User Pickups</h4>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      When waiting commuters request a ride at a stop along your corridor, an alert sounds with their station stop and passenger count.
+                      When waiting users request a ride at a stop along your corridor, an alert sounds with their station stop and user count.
                     </p>
                   </div>
 
@@ -348,7 +355,7 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
                     </span>
                     <h4 className="text-sm font-black text-emerald-800">Complete Trip & Safe Drop-off</h4>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Drop off riders at their designated station, tap &quot;Complete Trip&quot;, and your shuttle is immediately ready for subsequent commuters.
+                      Drop off users at their designated station, tap &quot;Complete Trip&quot;, and your shuttle is immediately ready for subsequent users.
                     </p>
                   </div>
                 </div>

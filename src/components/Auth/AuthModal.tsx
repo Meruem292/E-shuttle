@@ -373,7 +373,7 @@ export const AuthModal: React.FC = () => {
       } else if (mode === 'register') {
         if (roleSelection === 'customer') {
           await signUpCustomer(fullName, email, phone, password, securityQuestion, securityAnswer);
-          toast.success('Passenger account registered successfully! Welcome to E-Shuttle.');
+          toast.success('User account registered successfully! Welcome to E-Shuttle.');
         } else if (roleSelection === 'driver') {
           if (!driverLicenseCardUrl) {
             const err = "Driver's License card photo is required for driver registration and admin validation.";

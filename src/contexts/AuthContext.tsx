@@ -285,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const recoveredUserDoc: UserProfile = {
           uid: user.uid,
           role: 'customer',
-          fullName: user.displayName || userEmail.split('@')[0] || 'Passenger',
+          fullName: user.displayName || userEmail.split('@')[0] || 'User',
           email: userEmail,
           phone: '+63 900 000 0000',
           accountStatus: 'APPROVED',
@@ -660,11 +660,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       logActivity({
         action: 'AUTH_REGISTER',
-        actionLabel: 'Registered Passenger Account',
+        actionLabel: 'Registered User Account',
         entityType: 'USER',
         entityId: userUid,
         entityName: fullName.trim(),
-        summary: `New passenger registered: "${fullName.trim()}" (${cleanEmail})`,
+        summary: `New user registered: "${fullName.trim()}" (${cleanEmail})`,
         details: {
           summary: `Customer registered account with phone ${phone.trim()}`,
           after: { uid: userUid, fullName: fullName.trim(), email: cleanEmail, phone: phone.trim(), role: 'customer' },

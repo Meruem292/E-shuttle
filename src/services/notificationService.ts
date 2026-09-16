@@ -204,36 +204,60 @@ function getStorageKey(userId?: string): string {
   return `eshuttle_notifications_${userId || 'guest'}`;
 }
 
-export function getStoredNotifications(userId?: string): AppNotificationItem[] {
+export function getStoredNotifications(userId?: string, role?: string): AppNotificationItem[] {
   if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(getStorageKey(userId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+
+  const readKey = (key: string): AppNotificationItem[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Error reading stored notifications:', e);
     }
-  } catch (e) {
-    console.warn('Error reading stored notifications:', e);
+    return [];
+  };
+
+  const primaryItems = readKey(getStorageKey(userId));
+  
+  // If role is admin or userId is admin, also include general 'admin' notifications
+  if (role === 'admin' && userId !== 'admin') {
+    const adminItems = readKey(getStorageKey('admin'));
+    const map = new Map<string, AppNotificationItem>();
+    primaryItems.forEach((n) => map.set(n.id, n));
+    adminItems.forEach((n) => map.set(n.id, n));
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => b.timestamp - a.timestamp);
+    return merged.length > 0 ? merged : [getDefaultWelcomeNotification()];
   }
 
-  // Default initial announcement if empty
-  return [
-    {
-      id: 'welcome-init',
-      title: 'Welcome to E-Shuttle Service',
-      message: 'Eco-friendly campus and community shuttle transit between designated station stops.',
-      type: 'system',
-      timestamp: Date.now() - 3600000,
-      read: false,
-    },
-  ];
+  return primaryItems.length > 0 ? primaryItems : [getDefaultWelcomeNotification()];
+}
+
+function getDefaultWelcomeNotification(): AppNotificationItem {
+  return {
+    id: 'welcome-init',
+    title: 'Welcome to E-Shuttle Service',
+    message: 'Eco-friendly campus and community shuttle transit between designated station stops.',
+    type: 'system',
+    timestamp: Date.now() - 3600000,
+    read: false,
+  };
 }
 
 export function addAppNotification(
   item: Omit<AppNotificationItem, 'id' | 'timestamp' | 'read'>,
   userId?: string
 ): AppNotificationItem {
-  const current = getStoredNotifications(userId);
+  const targetKey = getStorageKey(userId);
+  let current: AppNotificationItem[] = [];
+  try {
+    const raw = localStorage.getItem(targetKey);
+    if (raw) current = JSON.parse(raw);
+  } catch {}
+
   const newNotif: AppNotificationItem = {
     ...item,
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -245,8 +269,8 @@ export function addAppNotification(
   const updated = [newNotif, ...current.filter((n) => n.id !== 'welcome-init')].slice(0, 50);
 
   try {
-    localStorage.setItem(getStorageKey(userId), JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
+    localStorage.setItem(targetKey, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId, item: newNotif } }));
   } catch (e) {
     console.warn('Error persisting notification:', e);
   }
@@ -254,39 +278,64 @@ export function addAppNotification(
   return newNotif;
 }
 
-export function markNotificationAsRead(id: string, userId?: string): void {
-  const current = getStoredNotifications(userId);
-  const updated = current.map((n) => (n.id === id ? { ...n, read: true } : n));
-  try {
-    localStorage.setItem(getStorageKey(userId), JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
-  } catch (e) {
-    console.warn('Error saving read status:', e);
+export function markNotificationAsRead(id: string, userId?: string, role?: string): void {
+  const markInKey = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const list: AppNotificationItem[] = JSON.parse(raw);
+        const updated = list.map((n) => (n.id === id ? { ...n, read: true } : n));
+        localStorage.setItem(key, JSON.stringify(updated));
+      }
+    } catch {}
+  };
+
+  markInKey(getStorageKey(userId));
+  if (role === 'admin' || userId === 'admin') {
+    markInKey(getStorageKey('admin'));
   }
+
+  try {
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
+  } catch {}
 }
 
-export function markAllNotificationsAsRead(userId?: string): void {
-  const current = getStoredNotifications(userId);
-  const updated = current.map((n) => ({ ...n, read: true }));
-  try {
-    localStorage.setItem(getStorageKey(userId), JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
-  } catch (e) {
-    console.warn('Error saving read all status:', e);
+export function markAllNotificationsAsRead(userId?: string, role?: string): void {
+  const markAllInKey = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const list: AppNotificationItem[] = JSON.parse(raw);
+        const updated = list.map((n) => ({ ...n, read: true }));
+        localStorage.setItem(key, JSON.stringify(updated));
+      }
+    } catch {}
+  };
+
+  markAllInKey(getStorageKey(userId));
+  if (role === 'admin' || userId === 'admin') {
+    markAllInKey(getStorageKey('admin'));
   }
+
+  try {
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
+  } catch {}
 }
 
-export function clearAllNotifications(userId?: string): void {
+export function clearAllNotifications(userId?: string, role?: string): void {
   try {
     localStorage.setItem(getStorageKey(userId), JSON.stringify([]));
+    if (role === 'admin' || userId === 'admin') {
+      localStorage.setItem(getStorageKey('admin'), JSON.stringify([]));
+    }
     window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { userId } }));
   } catch (e) {
     console.warn('Error clearing notifications:', e);
   }
 }
 
-export function getUnreadNotificationsCount(userId?: string): number {
-  const list = getStoredNotifications(userId);
+export function getUnreadNotificationsCount(userId?: string, role?: string): number {
+  const list = getStoredNotifications(userId, role);
   return list.filter((n) => !n.read).length;
 }
 
@@ -298,10 +347,16 @@ export function openNotificationModal(): void {
 
 export function subscribeToNotifications(
   userId: string | undefined,
-  callback: (items: AppNotificationItem[]) => void
+  roleOrCallback?: string | ((items: AppNotificationItem[]) => void),
+  optionalCallback?: (items: AppNotificationItem[]) => void
 ): () => void {
+  const role = typeof roleOrCallback === 'string' ? roleOrCallback : undefined;
+  const callback = typeof roleOrCallback === 'function' ? roleOrCallback : optionalCallback;
+
+  if (!callback) return () => {};
+
   const handler = () => {
-    callback(getStoredNotifications(userId));
+    callback(getStoredNotifications(userId, role));
   };
 
   if (typeof window !== 'undefined') {
@@ -310,7 +365,7 @@ export function subscribeToNotifications(
   }
 
   // Initial call
-  callback(getStoredNotifications(userId));
+  callback(getStoredNotifications(userId, role));
 
   return () => {
     if (typeof window !== 'undefined') {

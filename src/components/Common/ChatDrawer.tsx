@@ -64,7 +64,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       ? 'E-Shuttle Admin'
       : role === 'driver'
       ? driverProfile?.fullName || 'E-Shuttle Driver'
-      : userProfile?.fullName || 'Valued Passenger';
+      : userProfile?.fullName || 'Valued User';
   const currentUserRole = role || 'customer';
 
   // Navigation State
@@ -237,11 +237,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                     ? activeChannel.title || 'Live Ride Chat'
                     : 'Ride & Driver Messages'}
                 </h2>
-                <p className="text-[11px] text-blue-100 font-medium truncate">
-                  {activeChannel
-                    ? activeChannel.subtitle || '2-Way Live Chat'
-                    : `${filteredChannels.length} active conversations`}
-                </p>
+                {activeChannel?.subtitle ? (
+                  <p className="text-[11px] text-blue-100 font-medium truncate">
+                    {activeChannel.subtitle}
+                  </p>
+                ) : !activeChannel ? (
+                  <p className="text-[11px] text-blue-100 font-medium truncate">
+                    {`${filteredChannels.length} active conversation${filteredChannels.length === 1 ? '' : 's'}`}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -303,7 +307,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                   <div className="text-center py-12 text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
                     <p className="text-xs font-bold text-slate-500">No messages yet</p>
-                    <p className="text-[10px]">Type a message below to coordinate with your driver/passenger.</p>
+                    <p className="text-[10px]">Type a message below to coordinate with your driver/user.</p>
                   </div>
                 ) : (
                   deduplicateMessages(messages).map((msg) => {
@@ -420,7 +424,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                     <MessageSquare className="w-8 h-8 mx-auto text-[#0D47A1]/30" />
                     <p className="text-xs font-bold text-slate-500">No ride chats yet</p>
                     <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                      Direct chats with your driver or passenger will appear here when an active ride is underway.
+                      Direct chats with your driver or user will appear here when an active ride is underway.
                     </p>
                   </div>
                 ) : (

@@ -20,16 +20,16 @@ export const NotificationBellButton: React.FC<NotificationBellButtonProps> = ({
   iconClassName = 'w-5 h-5',
   showCount = false,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, role } = useAuth();
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
   useEffect(() => {
-    setUnreadCount(getUnreadNotificationsCount(currentUser?.uid));
-    const unsub = subscribeToNotifications(currentUser?.uid, (items) => {
+    setUnreadCount(getUnreadNotificationsCount(currentUser?.uid, role || undefined));
+    const unsub = subscribeToNotifications(currentUser?.uid, role || undefined, (items) => {
       setUnreadCount(items.filter((n) => !n.read).length);
     });
     return () => unsub();
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, role]);
 
   const handleClick = () => {
     if (onClick) {

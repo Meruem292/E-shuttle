@@ -54,6 +54,8 @@ import {
   IncidentTicket,
   subscribeToTickets,
   updateTicketStatus,
+  issueTicketWarning,
+  getOrCreateTicketChatChannel,
   INCIDENT_CATEGORIES,
 } from '../../services/ticketService';
 import {
@@ -105,6 +107,9 @@ import {
   GraduationCap,
   Plus,
   ClipboardList,
+  AlertOctagon,
+  Check,
+  Bike,
 } from 'lucide-react';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
@@ -497,6 +502,17 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
   const [selectedTicketChannelId, setSelectedTicketChannelId] = useState<string | null>(null);
   const [directChatTarget, setDirectChatTarget] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
   const [isSupportChatsModalOpen, setIsSupportChatsModalOpen] = useState<boolean>(false);
+  const [adminWarningModal, setAdminWarningModal] = useState<{
+    ticket: IncidentTicket;
+    reason: string;
+  } | null>(null);
+  const [isSubmittingAdminWarning, setIsSubmittingAdminWarning] = useState<boolean>(false);
+  const [adminResolutionModal, setAdminResolutionModal] = useState<{
+    ticket: IncidentTicket;
+    status: 'resolved' | 'dismissed';
+    note: string;
+  } | null>(null);
+  const [isSubmittingResolution, setIsSubmittingResolution] = useState<boolean>(false);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
   const [tutorialInitialStep, setTutorialInitialStep] = useState<number>(0);
@@ -670,7 +686,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
               },
               severity: 'danger',
             }).catch(() => {});
-            toast.success(`Passenger "${name}" suspended for ${days > 0 ? `${days} days` : 'indefinite time'}.`);
+            toast.success(`User "${name}" suspended for ${days > 0 ? `${days} days` : 'indefinite time'}.`);
           } else {
             await updateDoc(doc(db, 'drivers', id), {
               accountStatus: 'SUSPENDED',
@@ -896,13 +912,13 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
 
         logActivity({
           action: 'CREATE',
-          actionLabel: 'Created Passenger Account',
+          actionLabel: 'Created User Account',
           entityType: 'USER',
           entityId: newUid,
           entityName: createFullName.trim(),
-          summary: `Administrator manually created passenger account for "${createFullName.trim()}" (${createEmail.trim()})`,
+          summary: `Administrator manually created user account for "${createFullName.trim()}" (${createEmail.trim()})`,
           details: {
-            summary: 'Passenger account registered via admin dashboard',
+            summary: 'User account registered via admin dashboard',
             after: {
               fullName: createFullName.trim(),
               email: createEmail.trim(),
@@ -919,7 +935,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
           severity: 'success',
         }).catch(() => {});
 
-        toast.success(`Passenger account created for "${createFullName.trim()}".`);
+        toast.success(`User account created for "${createFullName.trim()}".`);
       }
 
       // Reset form and close
@@ -1153,7 +1169,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
         severity: newStatus === 'APPROVED' ? 'success' : 'danger',
       }).catch(() => {});
 
-      toast.success(`Passenger status updated to ${newStatus}.`);
+      toast.success(`User status updated to ${newStatus}.`);
     } catch (err: any) {
       console.error('Error updating customer status:', err);
       toast.error(err?.message || 'Error updating customer status');
@@ -1425,7 +1441,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
         return {
           title: 'Users',
           badge: 'DIRECTORY',
-          subtitle: 'Unified account directory for passengers, shuttle drivers, approvals, and RFID access',
+          subtitle: 'Unified account directory for users, shuttle drivers, approvals, and RFID access',
         };
       case 'zones':
         return {
@@ -1455,7 +1471,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
         return {
           title: 'Incidents',
           badge: 'SAFETY & DISPATCH',
-          subtitle: 'Passenger & driver safety reports, breakdowns, and 2-way dispatch support',
+          subtitle: 'User & driver safety reports, breakdowns, and dispatch support',
         };
       case 'settings':
         return {
@@ -1573,7 +1589,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Passenger & Driver Accounts ({customersOnly.length + drivers.length})</span>
+            <span>User & Driver Accounts ({customersOnly.length + drivers.length})</span>
           </button>
 
           <button
@@ -1699,7 +1715,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                     Simple Walkthrough: How to Use E-Shuttle
                   </h2>
                   <p className="text-xs text-blue-100 font-medium max-w-2xl leading-relaxed">
-                    Learn how to monitor active shuttles on the road, manage drivers & RFID cards, and assist passengers with a straightforward, step-by-step walkthrough.
+                    Learn how to monitor active shuttles on the road, manage drivers & RFID cards, and assist users with a straightforward, step-by-step walkthrough.
                   </p>
                 </div>
               </div>
@@ -1982,7 +1998,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   setShowCreateAccountModal(true);
                 }}
                 className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
-                title="Create a new passenger or driver account"
+                title="Create a new user or driver account"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Account</span>
@@ -2024,7 +2040,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <User className="w-3.5 h-3.5" />
-              <span>Passengers ({customersOnly.length})</span>
+              <span>Users ({customersOnly.length})</span>
             </button>
 
             <button
@@ -2212,7 +2228,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                       <div className="flex items-center gap-2 shrink-0 flex-wrap">
                         <button
                           onClick={() => setDirectChatTarget({ id: dr.uid, name: dr.fullName, role: 'driver' })}
-                          title="Open direct 2-way dispatch chat with driver"
+                          title="Open direct dispatch chat with driver"
                           className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
@@ -2317,14 +2333,14 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
                     <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5" />
-                      <span>Passengers / Users ({filteredCustomers.length})</span>
+                      <span>Users ({filteredCustomers.length})</span>
                     </h3>
                   </div>
                 )}
 
                 {filteredCustomers.length === 0 && userTabRole === 'CUSTOMERS' ? (
                   <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] shadow-md">
-                    No matching passenger accounts found.
+                    No matching user accounts found.
                   </div>
                 ) : (
                   filteredCustomers.map((cust) => {
@@ -2343,7 +2359,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1]">
-                                PASSENGER
+                                USER
                               </span>
                               <h3 className="font-black text-sm text-[#0D47A1]">{cust.fullName}</h3>
                               <span
@@ -2369,7 +2385,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
                           <button
                             onClick={() => setDirectChatTarget({ id: cust.uid, name: cust.fullName, role: 'customer' })}
-                            title="Open direct 2-way support chat with passenger"
+                            title="Open direct support chat with user"
                             className="px-3.5 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
@@ -2414,7 +2430,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                                 email: cust.email,
                               })
                             }
-                            title="Permanently remove passenger account from database"
+                            title="Permanently remove user account from database"
                             className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold active:scale-95 transition-transform flex items-center gap-1"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -3014,7 +3030,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   });
                 }}
                 className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase flex items-center gap-1 transition-colors"
-                title="Permanently remove passenger account from database"
+                title="Permanently remove user account from database"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Account</span>
@@ -3577,7 +3593,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                         Account Suspension Appeals ({suspensionAppeals.length})
                       </h3>
                       <p className="text-[10px] text-slate-500 font-bold">
-                        Review and lift suspensions for passengers and drivers requesting investigation
+                        Review and lift suspensions for users and drivers requesting investigation
                       </p>
                     </div>
                   </div>
@@ -3715,7 +3731,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                 <MessageSquare className="w-7 h-7 mx-auto text-slate-300" />
                 <p className="text-xs font-bold text-slate-600">No active user support chats</p>
                 <p className="text-[10px] text-slate-400">
-                  User support chats will automatically appear here when passengers or drivers open Help Desk.
+                  User support chats will automatically appear here when users or drivers open Help Desk.
                 </p>
               </div>
             ) : (
@@ -3771,6 +3787,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
               { id: 'open', label: `Open (${incidentTickets.filter((t) => t.status === 'open').length})` },
               { id: 'in_progress', label: `In Progress (${incidentTickets.filter((t) => t.status === 'in_progress').length})` },
               { id: 'resolved', label: `Resolved (${incidentTickets.filter((t) => t.status === 'resolved' || t.status === 'closed').length})` },
+              { id: 'dismissed', label: `Dismissed (${incidentTickets.filter((t) => t.status === 'dismissed').length})` },
             ].map((f) => (
               <button
                 key={f.id}
@@ -3832,6 +3849,11 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           >
                             {ticket.priority} Priority
                           </span>
+                          {ticket.actionTaken && ticket.actionTaken !== 'none' && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-[10px] font-black uppercase">
+                              Action: {ticket.actionTaken.replace('_', ' ')}
+                            </span>
+                          )}
                         </div>
 
                         {/* Ticket Status Controls */}
@@ -3848,16 +3870,24 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             <option value="open">OPEN</option>
                             <option value="in_progress">IN PROGRESS</option>
                             <option value="resolved">RESOLVED</option>
+                            <option value="dismissed">DISMISSED</option>
                             <option value="closed">CLOSED</option>
                           </select>
 
                           <button
-                            onClick={() => setSelectedTicketChannelId(ticket.channelId)}
-                            className="px-3 py-1 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-xl shadow flex items-center gap-1"
-                            title="Open 2-Way Chat Channel"
+                            onClick={async () => {
+                              try {
+                                const cid = await getOrCreateTicketChatChannel(ticket);
+                                setSelectedTicketChannelId(cid);
+                              } catch (e) {
+                                toast.error('Could not open chat channel.');
+                              }
+                            }}
+                            className="px-3 py-1 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-xl shadow flex items-center gap-1 active:scale-95 transition-transform"
+                            title="Open Chat"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                            <span>2-Way Chat</span>
+                            <span>Chat</span>
                           </button>
                         </div>
                       </div>
@@ -3868,6 +3898,116 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                         <p className="text-slate-700 font-semibold bg-[#F8FAFC] p-3 rounded-2xl border border-slate-200 leading-relaxed whitespace-pre-line">
                           {ticket.description}
                         </p>
+                      </div>
+
+                      {/* Tagged Trip Snapshot Audit Box */}
+                      {ticket.tripSnapshot && (
+                        <div className="bg-[#E3F2FD] border-2 border-[#0D47A1] rounded-2xl p-3 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider bg-[#0D47A1] text-white px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <Bike className="w-3 h-3" />
+                              <span>Tagged Trip Audit Record</span>
+                            </span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${
+                              ticket.tripSnapshot.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {ticket.tripSnapshot.status || 'Trip Record'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-[#0D47A1]">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <span className="truncate">{ticket.tripSnapshot.pickupAddress || 'Pickup Station'}</span>
+                              <span className="shrink-0 text-slate-400 font-normal">➔</span>
+                              <span className="truncate">{ticket.tripSnapshot.destinationAddress || 'Drop-off Station'}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-medium">
+                              {ticket.tripSnapshot.driverName && (
+                                <span>Driver: <strong className="text-slate-800">{ticket.tripSnapshot.driverName}</strong></span>
+                              )}
+                              {ticket.tripSnapshot.customerName && (
+                                <span>Passenger: <strong className="text-slate-800">{ticket.tripSnapshot.customerName}</strong></span>
+                              )}
+                              {ticket.tripSnapshot.driverVehicleInfo && (
+                                <span>Vehicle: <strong className="text-slate-800">{ticket.tripSnapshot.driverVehicleInfo}</strong></span>
+                              )}
+                              {ticket.tripSnapshot.distanceKm && (
+                                <span>{ticket.tripSnapshot.distanceKm} km</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Admin Notes if present */}
+                      {ticket.adminNotes && (
+                        <div className="bg-blue-50 border border-[#0D47A1]/20 rounded-2xl p-2.5 text-xs text-[#0D47A1]">
+                          <span className="font-black block text-[10px] uppercase tracking-wider mb-0.5 text-[#0D47A1]/70">
+                            Resolution / Investigation Note:
+                          </span>
+                          <p className="font-semibold">{ticket.adminNotes}</p>
+                        </div>
+                      )}
+
+                      {/* Direct Incident Action Buttons */}
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2 items-center justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAdminWarningModal({ ticket, reason: '' })}
+                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <AlertOctagon className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Issue Warning</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSuspendModalData({
+                                type: ticket.reporterRole === 'driver' ? 'driver' : 'customer',
+                                id: ticket.reporterId,
+                                name: ticket.reporterName,
+                              })
+                            }
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <Ban className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Suspend {ticket.reporterRole === 'driver' ? 'Driver' : 'User'}</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAdminResolutionModal({
+                                ticket,
+                                status: 'dismissed',
+                                note: ticket.adminNotes || '',
+                              })
+                            }
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1 transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Dismiss</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAdminResolutionModal({
+                                ticket,
+                                status: 'resolved',
+                                note: ticket.adminNotes || '',
+                              })
+                            }
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1 transition-colors shadow"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Resolve</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Reporter & Metadata Details */}
@@ -3896,6 +4036,172 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   );
                 })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Admin Warning Dialog Modal */}
+      {adminWarningModal && (
+        <div className="fixed inset-0 z-60 bg-black/70 flex items-center justify-center p-3 animate-in fade-in select-none">
+          <div className="bg-white border-2 border-amber-500 rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertOctagon className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Issue Official Warning</h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Target: {adminWarningModal.ticket.reporterName} ({adminWarningModal.ticket.reporterRole})
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-black text-slate-700 block">
+                Warning Notice / Violation Reason *
+              </label>
+              <textarea
+                rows={3}
+                required
+                placeholder="State clear reason for this official warning..."
+                value={adminWarningModal.reason}
+                onChange={(e) =>
+                  setAdminWarningModal({
+                    ...adminWarningModal,
+                    reason: e.target.value,
+                  })
+                }
+                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-800 font-medium focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setAdminWarningModal(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!adminWarningModal.reason.trim() || isSubmittingAdminWarning}
+                onClick={async () => {
+                  setIsSubmittingAdminWarning(true);
+                  try {
+                    await issueTicketWarning({
+                      ticketId: adminWarningModal.ticket.id,
+                      targetUserId: adminWarningModal.ticket.reporterId,
+                      targetRole: adminWarningModal.ticket.reporterRole === 'driver' ? 'driver' : 'customer',
+                      targetName: adminWarningModal.ticket.reporterName,
+                      warningReason: adminWarningModal.reason.trim(),
+                      adminUser: {
+                        uid: currentUser?.uid || 'admin',
+                        name: userProfile?.fullName || 'Platform Administrator',
+                      },
+                    });
+                    toast.success(`Official warning issued to ${adminWarningModal.ticket.reporterName}!`);
+                    setAdminWarningModal(null);
+                  } catch (err) {
+                    toast.error('Failed to issue warning.');
+                  } finally {
+                    setIsSubmittingAdminWarning(false);
+                  }
+                }}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs rounded-xl shadow transition-all"
+              >
+                {isSubmittingAdminWarning ? 'Sending Notice...' : 'Send Warning'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Resolution & Dismissal Modal with Optional Note */}
+      {adminResolutionModal && (
+        <div className="fixed inset-0 z-60 bg-black/70 flex items-center justify-center p-3 animate-in fade-in select-none">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                adminResolutionModal.status === 'resolved' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+              }`}>
+                {adminResolutionModal.status === 'resolved' ? <CheckCircle2 className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900">
+                  {adminResolutionModal.status === 'resolved' ? 'Resolve Incident Ticket' : 'Dismiss Incident Ticket'}
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Ticket #{adminResolutionModal.ticket.ticketNumber} • {adminResolutionModal.ticket.subject}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-black text-slate-700 block">
+                {adminResolutionModal.status === 'resolved' ? 'Resolution Notes (Optional)' : 'Dismissal Reason (Optional)'}
+              </label>
+              <textarea
+                rows={3}
+                placeholder={
+                  adminResolutionModal.status === 'resolved'
+                    ? 'e.g. Spoke with passenger and driver, item returned to station desk...'
+                    : 'e.g. Duplicate report or non-actionable inquiry...'
+                }
+                value={adminResolutionModal.note}
+                onChange={(e) =>
+                  setAdminResolutionModal({
+                    ...adminResolutionModal,
+                    note: e.target.value,
+                  })
+                }
+                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-800 font-medium focus:outline-none focus:border-[#0D47A1]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setAdminResolutionModal(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingResolution}
+                onClick={async () => {
+                  setIsSubmittingResolution(true);
+                  try {
+                    await updateTicketStatus(
+                      adminResolutionModal.ticket.id,
+                      adminResolutionModal.status,
+                      adminResolutionModal.status === 'resolved' ? adminResolutionModal.note.trim() || undefined : undefined,
+                      adminResolutionModal.status === 'dismissed' ? adminResolutionModal.note.trim() || undefined : undefined
+                    );
+                    toast.success(
+                      `Ticket #${adminResolutionModal.ticket.ticketNumber} marked as ${adminResolutionModal.status.toUpperCase()}.`
+                    );
+                    setAdminResolutionModal(null);
+                  } catch (err) {
+                    toast.error('Failed to update ticket.');
+                  } finally {
+                    setIsSubmittingResolution(false);
+                  }
+                }}
+                className={`flex-1 py-2.5 text-white font-black text-xs rounded-xl shadow transition-all ${
+                  adminResolutionModal.status === 'resolved'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {isSubmittingResolution
+                  ? 'Updating...'
+                  : adminResolutionModal.status === 'resolved'
+                  ? 'Confirm Resolution'
+                  : 'Confirm Dismissal'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -4021,7 +4327,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   <User className="w-4 h-4" />
-                  <span>Passenger</span>
+                  <span>User</span>
                 </button>
 
                 <button
@@ -4260,7 +4566,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>Create {createRole === 'driver' ? 'Driver' : 'Passenger'}</span>
+                      <span>Create {createRole === 'driver' ? 'Driver' : 'User'}</span>
                     </>
                   )}
                 </button>
@@ -4439,7 +4745,6 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-black text-base text-[#0D47A1]">Dispatch & Support Chats</h3>
-                  <p className="text-xs text-slate-500 font-bold">Active 2-way user & driver helpdesk threads</p>
                 </div>
               </div>
               <button

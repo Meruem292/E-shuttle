@@ -159,7 +159,7 @@ export const AdminPinSettingsCard: React.FC = () => {
           <span>Sensitive Operations Protected by Secret PIN</span>
         </div>
         <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
-          Whenever you delete passenger/driver accounts, modify dispatch fares, delete service zones or stations,
+          Whenever you delete user/driver accounts, modify dispatch fares, delete service zones or stations,
           clear audit trails, or assign RFID cards, you will be prompted to enter this Secret PIN to prevent accidental
           or unauthorized changes.
         </p>

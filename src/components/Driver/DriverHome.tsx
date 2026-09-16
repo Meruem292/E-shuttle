@@ -137,7 +137,7 @@ export const DriverHome: React.FC = () => {
       driverProfile.currentLocation,
       5, // 5 km search radius
       (bookings) => {
-        // Multi-passenger pickup detection & alert
+        // Multi-user pickup detection & alert
         if (bookings.length > prevRequestCountRef.current && bookings.length > 0) {
           const isMulti = bookings.length > 1;
 
@@ -148,19 +148,19 @@ export const DriverHome: React.FC = () => {
             stationCounts[stName] = (stationCounts[stName] || 0) + 1;
           });
           const stationBreakdown = Object.entries(stationCounts)
-            .map(([st, count]) => `${st} (${count} rider${count > 1 ? 's' : ''})`)
+            .map(([st, count]) => `${st} (${count} user${count > 1 ? 's' : ''})`)
             .join(' • ');
 
           playPickupChime('new_request');
           triggerHapticVibrate(isMulti ? [250, 100, 250, 100, 250] : [200, 100, 200]);
 
           if (isMulti) {
-            speakPickupAnnouncement(`Multi-passenger pickup alert: ${bookings.length} commuters waiting across stations.`);
-            sendNativePickupNotification(`Multi-Passenger Pickup: ${bookings.length} Riders!`, {
+            speakPickupAnnouncement(`Multi-user pickup alert: ${bookings.length} users waiting across stations.`);
+            sendNativePickupNotification(`Multi-User Pickup: ${bookings.length} Users!`, {
               body: `Waiting stops: ${stationBreakdown}`,
             });
             addAppNotification({
-              title: `Multi-Passenger Alert (${bookings.length} Riders)`,
+              title: `Multi-User Alert (${bookings.length} Users)`,
               message: `Waiting along route: ${stationBreakdown}`,
               type: 'pickup',
               meta: { count: bookings.length },
@@ -168,9 +168,9 @@ export const DriverHome: React.FC = () => {
             setDriverNotification({
               id: String(Date.now()),
               type: 'new_request',
-              title: `Multi-Passenger Alert (${bookings.length} Riders Waiting)`,
-              message: `Waiting along route: ${stationBreakdown}. E-Shuttle accommodates multiple passengers along the corridor.`,
-              actionLabel: 'Accept First Rider',
+              title: `Multi-User Alert (${bookings.length} Users Waiting)`,
+              message: `Waiting along route: ${stationBreakdown}. E-Shuttle accommodates multiple users along the corridor.`,
+              actionLabel: 'Accept First User',
               onAction: () => {
                 handleAcceptRide(bookings[0]);
               },
@@ -182,7 +182,7 @@ export const DriverHome: React.FC = () => {
               body: `${newest.customerName} requested a pickup at ${newest.pickup.address}`,
             });
             addAppNotification({
-              title: 'New Passenger Pickup Request',
+              title: 'New User Pickup Request',
               message: `${newest.customerName} waiting at ${newest.pickup.address}`,
               type: 'pickup',
               meta: { bookingId: newest.id },
@@ -190,7 +190,7 @@ export const DriverHome: React.FC = () => {
             setDriverNotification({
               id: String(Date.now()),
               type: 'new_request',
-              title: 'New Passenger Pickup Request!',
+              title: 'New User Pickup Request!',
               message: `${newest.customerName} is waiting at ${newest.pickup.address} (${newest.distanceKm} km route).`,
               actionLabel: 'Accept Ride',
               onAction: () => {
@@ -231,7 +231,7 @@ export const DriverHome: React.FC = () => {
         }
       }
 
-      // 300-METER PROXIMITY TRIGGER FOR DRIVER: Alert driver when within 300m of passenger pickup
+      // 300-METER PROXIMITY TRIGGER FOR DRIVER: Alert driver when within 300m of user pickup
       if (
         activeRide?.status === 'DRIVER_ASSIGNED' &&
         activeRide.pickup?.latitude &&
@@ -333,7 +333,7 @@ export const DriverHome: React.FC = () => {
     try {
       await acceptBookingAtomic(booking.id, driverProfile);
       setAvailability('BUSY');
-      toast.success(`Ride accepted for ${booking.customerName || 'passenger'}! Heading to pickup.`);
+      toast.success(`Ride accepted for ${booking.customerName || 'user'}! Heading to pickup.`);
     } catch (err: any) {
       console.error('Accept booking failed:', err);
       const errMsg = err.message || 'Ride already accepted by another driver.';
@@ -656,12 +656,12 @@ export const DriverHome: React.FC = () => {
               {nearbyRequests.length > 1 && (
                 <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <Users className="w-3 h-3" />
-                  Multi-Passenger
+                  Multi-User
                 </span>
               )}
             </div>
 
-            {/* Multi-Passenger Pickup Grouping Banner */}
+            {/* Multi-User Pickup Grouping Banner */}
             {nearbyRequests.length > 1 && (
               <div className="bg-[#E3F2FD] border-2 border-[#0D47A1] rounded-2xl p-3 flex items-start gap-2.5 text-[#0D47A1] shadow-sm">
                 <div className="w-7 h-7 rounded-xl bg-[#0D47A1] text-white flex items-center justify-center shrink-0 font-bold">
@@ -669,13 +669,13 @@ export const DriverHome: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase text-[#0D47A1]">Multi-Passenger Pickups</span>
+                    <span className="text-xs font-black uppercase text-[#0D47A1]">Multi-User Pickups</span>
                     <span className="text-[10px] font-bold bg-white text-[#0D47A1] px-2 py-0.5 rounded-full border border-[#0D47A1]/40">
-                      {nearbyRequests.length} Riders in Queue
+                      {nearbyRequests.length} Users in Queue
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-700 font-medium mt-0.5">
-                    Shuttles can pick up multiple passengers waiting along the designated station stops.
+                    Shuttles can pick up multiple users waiting along the designated station stops.
                   </p>
                 </div>
               </div>
