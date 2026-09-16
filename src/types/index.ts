@@ -44,6 +44,8 @@ export interface UserProfile {
   suspendedUntil?: number | null;
   securityQuestion?: string;
   securityAnswer?: string;
+  passwordLastChangedAt?: any;
+  passwordExpiryDays?: number;
   createdAt: any;
   updatedAt: any;
 }
@@ -67,6 +69,8 @@ export interface DriverProfile {
   driverLicenseNumber?: string; // Optional Driver's License Number
   securityQuestion?: string;
   securityAnswer?: string;
+  passwordLastChangedAt?: any;
+  passwordExpiryDays?: number;
   activeEbikeId?: string | null; // Device ID of the e-shuttle currently taken over by driver
   disconnectNotice?: string | null; // Alert message when driver is automatically logged out/disconnected by a new RFID tap
   currentLocation?: LocationPoint;
@@ -153,6 +157,7 @@ export interface AdminSettings {
   maxServiceRadiusKm?: number;
   appLogoUrl?: string;
   mediaStorageBucket?: string;
+  passwordExpiryDays?: number; // Days range after which another password change is required/recommended
   updatedAt?: any;
 }
 

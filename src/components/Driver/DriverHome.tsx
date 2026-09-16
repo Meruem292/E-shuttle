@@ -14,6 +14,7 @@ import {
   Info,
   X,
   Users,
+  CreditCard,
 } from 'lucide-react';
 import {
   listenToNearbySearchingBookings,
@@ -22,7 +23,7 @@ import {
   updateBookingStatus,
   updateDriverLocation,
 } from '../../services/bookingService';
-import { updateEBikeGpsLocation } from '../../services/ebikeService';
+import { updateEBikeGpsLocation, unbindDriverFromEbike } from '../../services/ebikeService';
 import { calculateDistanceMeters } from '../../services/stationService';
 import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -293,15 +294,28 @@ export const DriverHome: React.FC = () => {
 
     const nextState: DriverAvailability = availability === 'OFFLINE' ? 'ONLINE' : 'OFFLINE';
     try {
-      await updateDoc(doc(db, 'drivers', currentUser.uid), {
-        availability: nextState,
-        updatedAt: serverTimestamp(),
-      });
-      setAvailability(nextState);
-      if (nextState === 'ONLINE') {
-        toast.success('You are ONLINE. Ready to receive shuttle requests.');
+      if (nextState === 'OFFLINE') {
+        if (driverProfile.activeEbikeId) {
+          await unbindDriverFromEbike(
+            driverProfile.activeEbikeId,
+            currentUser.uid,
+            'Driver switched to OFFLINE in app'
+          );
+        } else {
+          await updateDoc(doc(db, 'drivers', currentUser.uid), {
+            availability: 'OFFLINE',
+            updatedAt: serverTimestamp(),
+          });
+        }
+        setAvailability('OFFLINE');
+        toast.info('You are now OFFLINE. E-Shuttle released.');
       } else {
-        toast.info('You are OFFLINE.');
+        await updateDoc(doc(db, 'drivers', currentUser.uid), {
+          availability: 'ONLINE',
+          updatedAt: serverTimestamp(),
+        });
+        setAvailability('ONLINE');
+        toast.success('You are ONLINE. Ready to receive shuttle requests.');
       }
     } catch (err: any) {
       const errMsg = err.message || 'Failed to update availability.';
@@ -719,15 +733,21 @@ export const DriverHome: React.FC = () => {
           </div>
         ) : (
           /* OFFLINE BANNER */
-          <div className="bg-white/95 backdrop-blur-xl border-2 border-[#0D47A1] rounded-3xl p-5 shadow-2xl text-center space-y-3 text-[#0D47A1]">
+          <div className="bg-white/95 backdrop-blur-xl border-2 border-[#0D47A1] rounded-3xl p-4 shadow-2xl text-center space-y-3 text-[#0D47A1]">
+            <div className="flex items-center justify-center gap-2 p-2.5 bg-[#E3F2FD] border border-[#0D47A1]/40 rounded-2xl text-[11px] text-[#0D47A1] font-bold">
+              <CreditCard className="w-4 h-4 text-[#0D47A1] shrink-0" />
+              <span>Tap your RFID card on any E-Shuttle device to automatically go ONLINE.</span>
+            </div>
+
             <p className="text-xs text-slate-600 font-medium">You are currently <b className="text-[#0D47A1]">OFFLINE</b>.</p>
+
             <button
               onClick={handleToggleOnline}
               title="Go online to start receiving pick-up and drop-off requests from users"
               className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-2xl shadow-lg flex items-center justify-center gap-2 uppercase tracking-wider border border-[#0D47A1]"
             >
               <Power className="w-4 h-4" />
-              <span>Receive Shuttle Requests</span>
+              <span>Go Online Manually</span>
             </button>
           </div>
         )}

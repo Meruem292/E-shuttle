@@ -9,6 +9,7 @@ import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../ser
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
 import { SecurityQuestionCard } from '../Common/SecurityQuestionCard';
+import { PasswordManagementCard } from '../Common/PasswordManagementCard';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
@@ -331,6 +332,9 @@ export const DriverProfile: React.FC = () => {
 
       {/* Security Question & Password Recovery Card */}
       <SecurityQuestionCard />
+
+      {/* Password Rotation Policy & Change Password Card */}
+      <PasswordManagementCard />
 
       {/* FAQs & Service Route Information Card */}
       <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-xl">

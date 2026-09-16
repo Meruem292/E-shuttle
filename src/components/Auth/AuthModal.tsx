@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Eye,
   EyeOff,
@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Sparkles,
   Key,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
@@ -139,6 +140,18 @@ export const AuthModal: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<boolean>(false);
+
+  // Check if user landed on auth screen due to 5-minute inactivity session expiration
+  useEffect(() => {
+    try {
+      const expiredReason = sessionStorage.getItem('eshuttle_session_expired_reason');
+      if (expiredReason === 'inactivity_5min') {
+        setSessionExpiredNotice(true);
+        sessionStorage.removeItem('eshuttle_session_expired_reason');
+      }
+    } catch {}
+  }, []);
 
   const fullNameTrimmed = fullName.trim();
   const fullNameValidationError =
@@ -882,8 +895,30 @@ export const AuthModal: React.FC = () => {
             )}
           </div>
         ) : (
-          /* Standard Auth Form */
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <>
+            {/* Session Inactivity Timeout Alert Banner */}
+            {sessionExpiredNotice && mode === 'login' && (
+              <div className="p-3.5 bg-amber-50 border-2 border-amber-400 rounded-2xl text-amber-900 text-xs flex items-start gap-2.5 shadow-sm animate-in fade-in duration-200 mb-1">
+                <Clock className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <div className="space-y-0.5 flex-1 min-w-0">
+                  <p className="font-extrabold text-amber-950">Session Expired</p>
+                  <p className="text-[11px] text-amber-800 font-medium leading-snug">
+                    You were automatically signed out due to 5 minutes of inactivity. Please sign in again.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSessionExpiredNotice(false)}
+                  className="text-amber-600 hover:text-amber-900 text-xs font-black p-0.5"
+                  title="Dismiss notification"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Standard Auth Form */}
+            <form onSubmit={handleSubmit} className="space-y-3">
           {mode === 'register' && (
             <>
               {/* Role Selection */}
@@ -1364,6 +1399,7 @@ export const AuthModal: React.FC = () => {
               : `Register ${roleSelection === 'customer' ? 'User' : 'Driver'}`}
           </button>
         </form>
+        </>
         )}
 
         {/* Return link when in Admin mode */}

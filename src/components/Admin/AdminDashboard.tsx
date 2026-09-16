@@ -27,6 +27,7 @@ import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAdminPin } from '../../contexts/AdminPinContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AdminPinSettingsCard } from './AdminPinSettingsCard';
+import { PasswordManagementCard } from '../Common/PasswordManagementCard';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import {
@@ -2879,102 +2880,20 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
 
-          {/* CARD 3: CHANGE ADMIN PASSWORD */}
-          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-[#0D47A1]" />
-                <div>
-                  <h3 className="font-black text-sm text-[#0D47A1]">Change Admin Password</h3>
-                  <p className="text-[10px] text-slate-500 font-medium">Update password credentials for security</p>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleChangeAdminPassword} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-[#0D47A1]">Current Password</label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPass ? 'text' : 'password'}
-                    required
-                    placeholder="Enter current password"
-                    value={currentPass}
-                    onChange={(e) => setCurrentPass(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0] pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPass(!showCurrentPass)}
-                    className="absolute right-3 top-2.5 text-[#0D47A1] hover:text-[#1565C0]"
-                  >
-                    {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#0D47A1]">New Password</label>
-                  <div className="relative">
-                    <input
-                      type={showNewPass ? 'text' : 'password'}
-                      required
-                      placeholder="At least 6 characters"
-                      value={newPass}
-                      onChange={(e) => setNewPass(e.target.value)}
-                      className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0] pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPass(!showNewPass)}
-                      className="absolute right-3 top-2.5 text-[#0D47A1] hover:text-[#1565C0]"
-                    >
-                      {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#0D47A1]">Confirm New Password</label>
-                  <input
-                    type={showNewPass ? 'text' : 'password'}
-                    required
-                    placeholder="Re-enter new password"
-                    value={confirmPass}
-                    onChange={(e) => setConfirmPass(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0]"
-                  />
-                </div>
-              </div>
-
-              {passMsg && (
-                <div
-                  className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-                    passMsg.type === 'success'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-rose-50 text-rose-800 border border-rose-200'
-                  }`}
-                >
-                  {passMsg.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                  )}
-                  <span>{passMsg.text}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={passChanging}
-                className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-md active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
-              >
-                <Lock className="w-4 h-4 text-[#90CAF9]" />
-                <span>{passChanging ? 'Updating Password...' : 'Update Admin Password'}</span>
-              </button>
-            </form>
-          </div>
+          {/* CARD 3: ADMIN PASSWORD & SYSTEM ROTATION POLICY */}
+          <PasswordManagementCard
+            isAdminMasterView={true}
+            onAdminPinPrompt={(onConfirmAction) => {
+              promptAdminPin({
+                title: 'Authorize Master Password Change',
+                actionDescription: 'Enter Secret PIN to authorize changing administrator master login password',
+                severity: 'danger',
+                onConfirm: async () => {
+                  await onConfirmAction();
+                },
+              });
+            }}
+          />
 
           {/* CARD 3: ADMIN ACTION SECRET PIN CONFIGURATION */}
           <AdminPinSettingsCard />

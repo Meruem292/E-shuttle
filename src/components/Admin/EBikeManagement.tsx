@@ -4,7 +4,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { EBikeDevice, DriverProfile, OperationalZone } from '../../types';
+import { EBikeDevice, EBikeStatus, DriverProfile, OperationalZone } from '../../types';
 import {
   Bike,
   CreditCard,
@@ -12,12 +12,21 @@ import {
   Code2,
   MapPin,
   Layers,
+  Edit2,
+  Trash2,
+  Save,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  Wrench,
+  Sliders,
 } from 'lucide-react';
 import { AdminEBikeMap } from './AdminEBikeMap';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import {
   subscribeToEBikes,
   registerEBike,
+  updateEBike,
   deleteEBike,
   pairDriverRfidCard,
   processRfidTapEvent,
@@ -71,7 +80,26 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
   const [pairSuccess, setPairSuccess] = useState('');
   const [showTipExplanation, setShowTipExplanation] = useState(false);
 
+  // Edit E-Bike State
+  const [editingBike, setEditingBike] = useState<EBikeDevice | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSerialNumber, setEditSerialNumber] = useState('');
+  const [editZoneId, setEditZoneId] = useState('');
+  const [editStatus, setEditStatus] = useState<EBikeStatus>('AVAILABLE');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+
   // Native back handlers
+  useBackHandler(
+    editingBike !== null,
+    () => {
+      setEditingBike(null);
+      return true;
+    },
+    20,
+    'ebike-edit-modal'
+  );
+
   useBackHandler(
     selectedDriverForRfid !== '',
     () => {
@@ -221,6 +249,62 @@ export const EBikeManagement: React.FC<EBikeManagementProps> = ({
     } finally {
       setRegistering(false);
     }
+  };
+
+  // Handle Opening Edit Modal
+  const handleOpenEditModal = (bike: EBikeDevice) => {
+    setEditingBike(bike);
+    setEditName(bike.name || '');
+    setEditSerialNumber(bike.serialNumber || '');
+    setEditZoneId(bike.zoneId || '');
+    setEditStatus(bike.status || 'AVAILABLE');
+    setEditError('');
+  };
+
+  // Handle Saving Edited E-Bike (Protected by Secret PIN)
+  const handleSaveEditBike = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBike) return;
+
+    if (!editName.trim() || !editSerialNumber.trim()) {
+      const msg = 'Please provide both an E-Shuttle name and plate/serial number.';
+      setEditError(msg);
+      toast.warning(msg);
+      return;
+    }
+
+    const matchedZone = zones.find((z) => z.id === editZoneId);
+    const targetBike = editingBike;
+
+    promptAdminPin({
+      title: 'Authorize Edit E-Shuttle',
+      actionDescription: `Enter Secret PIN to apply changes to vehicle unit "${targetBike.name}" (${targetBike.deviceId})`,
+      entityName: targetBike.name,
+      severity: 'warning',
+      onConfirm: async () => {
+        setIsSavingEdit(true);
+        setEditError('');
+        try {
+          await updateEBike(targetBike.deviceId, {
+            name: editName.trim(),
+            serialNumber: editSerialNumber.trim().toUpperCase(),
+            zoneId: editZoneId || null,
+            zoneName: matchedZone?.name || null,
+            status: editStatus,
+          });
+
+          toast.success(`E-Shuttle "${editName.trim()}" (${targetBike.deviceId}) updated successfully!`);
+          setEditingBike(null);
+        } catch (err: any) {
+          console.error('Update e-bike error:', err);
+          const errMsg = err?.message || 'Failed to update E-Shuttle.';
+          setEditError(errMsg);
+          toast.error(errMsg);
+        } finally {
+          setIsSavingEdit(false);
+        }
+      },
+    });
   };
 
   // Handle Deleting E-Bike (Protected by Secret PIN)
@@ -794,13 +878,25 @@ void sendRfidTapToFirebase(String rfidUid) {
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => handleDeleteBike(bike.deviceId)}
-                          className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold uppercase transition-colors"
-                          title="Remove Shuttle"
-                        >
-                          DELETE
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditModal(bike)}
+                            className="px-2.5 py-1 bg-[#E3F2FD] hover:bg-[#BBDEFB] text-[#0D47A1] border border-[#0D47A1]/40 rounded-lg text-[10px] font-black uppercase transition-colors flex items-center gap-1 shadow-xs"
+                            title="Edit E-Shuttle Details"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteBike(bike.deviceId)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center gap-1"
+                            title="Remove Shuttle"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Driver & RFID Status */}
@@ -1279,6 +1375,148 @@ void sendRfidTapToFirebase(String rfidUid) {
 
           <div className="bg-[#0D47A1] border-2 border-[#0D47A1] rounded-3xl p-4 font-mono text-xs text-[#E3F2FD] overflow-x-auto max-h-[500px] shadow-2xl relative">
             <pre>{esp32ArduinoCode}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* 5. EDIT E-SHUTTLE MODAL */}
+      {editingBike && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-6 shadow-2xl max-w-lg w-full space-y-5 relative text-[#0D47A1]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#0D47A1]/20">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-2xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1]">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0D47A1]">Edit E-Shuttle</h3>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    Hardware ID: <span className="font-bold text-[#0D47A1]">{editingBike.deviceId}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBike(null)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditBike} className="space-y-4">
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Device Identifier (Hardware UID)
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingBike.deviceId}
+                    className="w-full bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-600 font-mono font-bold cursor-not-allowed uppercase"
+                  />
+                  <span className="text-[9px] text-slate-400 mt-0.5 block">
+                    Permanent hardware identifier linked to microcontroller firmware.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    E-Shuttle Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="e.g. EcoGlide Shuttle #1"
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold placeholder:text-slate-400 focus:outline-none focus:border-[#1565C0] focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Plate Number / Hardware Serial
+                  </label>
+                  <input
+                    type="text"
+                    value={editSerialNumber}
+                    onChange={(e) => setEditSerialNumber(e.target.value)}
+                    placeholder="e.g. EB-88402-X or ABC-1234"
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold placeholder:text-slate-400 uppercase focus:outline-none focus:border-[#1565C0] focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Operational Geofence Zone
+                  </label>
+                  <select
+                    value={editZoneId}
+                    onChange={(e) => setEditZoneId(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:outline-none focus:border-[#1565C0] focus:bg-white"
+                  >
+                    <option value="">-- No Specific Zone Assigned --</option>
+                    {zones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.name} ({z.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Fleet Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as EBikeStatus)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:outline-none focus:border-[#1565C0] focus:bg-white"
+                  >
+                    <option value="AVAILABLE">AVAILABLE (Ready for Driver Pairing)</option>
+                    <option value="IN_USE">IN_USE (Active Route Operation)</option>
+                    <option value="MAINTENANCE">MAINTENANCE (Offline for Repairs/Inspection)</option>
+                  </select>
+                </div>
+
+                {editStatus === 'MAINTENANCE' && editingBike.currentDriverId && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2 text-[11px] text-amber-800">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Warning:</strong> Saving with <strong>MAINTENANCE</strong> status will automatically release the assigned driver ({editingBike.currentDriverName || 'Active Driver'}) and mark vehicle as offline.
+                    </span>
+                  </div>
+                )}
+
+                {editError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-600 font-bold">
+                    {editError}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#0D47A1]/20">
+                <button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={() => setEditingBike(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl font-black text-xs shadow-lg active:scale-95 transition-transform flex items-center gap-1.5 uppercase tracking-wider"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingEdit ? 'Saving...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

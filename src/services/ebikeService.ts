@@ -101,12 +101,133 @@ export async function registerEBike(data: {
 }
 
 /**
+ * Update an E-Bike / E-Shuttle hardware device in Firestore with full audit logging
+ */
+export async function updateEBike(
+  deviceId: string,
+  updates: Partial<EBikeDevice>,
+  performedBy?: { uid: string; name: string; email?: string; role?: string }
+): Promise<void> {
+  const cleanDeviceId = deviceId.trim().toUpperCase();
+  const ebikeRef = doc(db, 'ebikes', cleanDeviceId);
+
+  const existingDoc = await getDoc(ebikeRef);
+  if (!existingDoc.exists()) {
+    throw new Error(`E-Shuttle "${cleanDeviceId}" does not exist in registry.`);
+  }
+
+  const existingData = existingDoc.data() as EBikeDevice;
+
+  // Clean updates
+  const cleanedUpdates: Record<string, any> = {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (updates.name !== undefined) cleanedUpdates.name = updates.name.trim();
+  if (updates.serialNumber !== undefined) cleanedUpdates.serialNumber = updates.serialNumber.trim().toUpperCase();
+  if (updates.zoneId !== undefined) cleanedUpdates.zoneId = updates.zoneId || null;
+  if (updates.zoneName !== undefined) cleanedUpdates.zoneName = updates.zoneName || null;
+  if (updates.status !== undefined) cleanedUpdates.status = updates.status;
+
+  // If status is changed to MAINTENANCE and vehicle currently has a driver, unbind driver
+  if (updates.status === 'MAINTENANCE' && existingData.currentDriverId) {
+    try {
+      await updateDoc(doc(db, 'drivers', existingData.currentDriverId), {
+        activeEbikeId: null,
+        availability: 'OFFLINE',
+        vehicleInfo: 'Unassigned E-Shuttle',
+        disconnectNotice: `E-Shuttle "${existingData.name}" was placed under maintenance by administrator.`,
+        updatedAt: serverTimestamp(),
+      });
+      cleanedUpdates.currentDriverId = null;
+      cleanedUpdates.currentDriverName = null;
+      cleanedUpdates.currentDriverPhone = null;
+    } catch (driverErr) {
+      console.warn('Could not unbind driver during maintenance toggle:', driverErr);
+    }
+  }
+
+  await updateDoc(ebikeRef, cleanedUpdates);
+
+  // Compute changed field list for logging
+  const changedFields: string[] = [];
+  if (updates.name && updates.name !== existingData.name) {
+    changedFields.push(`Name: "${existingData.name}" → "${updates.name}"`);
+  }
+  if (updates.serialNumber && updates.serialNumber !== existingData.serialNumber) {
+    changedFields.push(`Plate #: "${existingData.serialNumber}" → "${updates.serialNumber}"`);
+  }
+  if (updates.zoneId !== undefined && updates.zoneId !== existingData.zoneId) {
+    changedFields.push(`Zone: "${existingData.zoneName || 'None'}" → "${updates.zoneName || 'None'}"`);
+  }
+  if (updates.status && updates.status !== existingData.status) {
+    changedFields.push(`Status: "${existingData.status}" → "${updates.status}"`);
+  }
+
+  const updatedName = updates.name || existingData.name;
+
+  // Audit log update
+  await logActivity({
+    action: 'UPDATE',
+    actionLabel: 'Updated E-Shuttle',
+    entityType: 'SHUTTLE',
+    entityId: cleanDeviceId,
+    entityName: updatedName,
+    summary: `Administrator updated e-shuttle device "${updatedName}" (${cleanDeviceId})`,
+    details: {
+      summary: changedFields.length > 0 ? `Updated properties: ${changedFields.join(', ')}` : `E-shuttle details updated by administrator`,
+      before: {
+        deviceId: cleanDeviceId,
+        name: existingData.name,
+        serialNumber: existingData.serialNumber,
+        zoneId: existingData.zoneId,
+        zoneName: existingData.zoneName,
+        status: existingData.status,
+      },
+      after: {
+        deviceId: cleanDeviceId,
+        name: updatedName,
+        serialNumber: updates.serialNumber || existingData.serialNumber,
+        zoneId: updates.zoneId !== undefined ? updates.zoneId : existingData.zoneId,
+        zoneName: updates.zoneName !== undefined ? updates.zoneName : existingData.zoneName,
+        status: updates.status || existingData.status,
+      },
+      metadata: {
+        changedFields,
+      },
+    },
+    performedBy,
+    severity: updates.status === 'MAINTENANCE' ? 'warning' : 'info',
+  });
+}
+
+/**
  * Delete an E-Bike device
  */
-export async function deleteEBike(deviceId: string, nameHint?: string): Promise<void> {
+export async function deleteEBike(
+  deviceId: string,
+  nameHint?: string,
+  performedBy?: { uid: string; name: string; email?: string; role?: string }
+): Promise<void> {
   const existingDoc = await getDoc(doc(db, 'ebikes', deviceId)).catch(() => null);
-  const existingData = existingDoc?.exists() ? existingDoc.data() : null;
+  const existingData = existingDoc?.exists() ? (existingDoc.data() as EBikeDevice) : null;
   const ebikeName = nameHint || existingData?.name || deviceId;
+
+  // If bike has an active driver, unbind driver
+  if (existingData?.currentDriverId) {
+    try {
+      await updateDoc(doc(db, 'drivers', existingData.currentDriverId), {
+        activeEbikeId: null,
+        availability: 'OFFLINE',
+        vehicleInfo: 'Unassigned E-Shuttle',
+        disconnectNotice: `E-Shuttle "${ebikeName}" was decommissioned and removed from the fleet.`,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (driverErr) {
+      console.warn('Could not unbind driver during shuttle deletion:', driverErr);
+    }
+  }
 
   await deleteDoc(doc(db, 'ebikes', deviceId));
 
@@ -117,11 +238,24 @@ export async function deleteEBike(deviceId: string, nameHint?: string): Promise<
     entityType: 'SHUTTLE',
     entityId: deviceId,
     entityName: ebikeName,
-    summary: `Decommissioned and deleted e-shuttle device "${ebikeName}" from fleet`,
+    summary: `Decommissioned and deleted e-shuttle device "${ebikeName}" (ID: ${deviceId}) from fleet`,
     details: {
-      summary: `Device removed from active fleet inventory`,
-      before: existingData,
+      summary: `Device removed from active fleet inventory by administrator`,
+      before: existingData ? {
+        deviceId,
+        name: existingData.name,
+        serialNumber: existingData.serialNumber,
+        zoneName: existingData.zoneName,
+        status: existingData.status,
+      } : null,
+      metadata: {
+        deviceId,
+        serialNumber: existingData?.serialNumber,
+        zoneName: existingData?.zoneName,
+        status: existingData?.status,
+      },
     },
+    performedBy,
     severity: 'danger',
   });
 }
@@ -184,8 +318,12 @@ export async function pairDriverRfidCard(driverUid: string, rfidCardUid: string)
 }
 
 /**
- * Process RFID Tap-In / Tap-Out Event from ESP32 or Simulator
- * Handles automatic takeover, clocking out previous drivers, and setting driver status.
+ * Process RFID Tap Event from ESP32 or Simulator
+ * Handles automatic Tap-to-Drive activation:
+ * - Driver is automatically set to ONLINE (On Duty) upon tapping their RFID card
+ * - If current driver was on another vehicle, transfers them to this vehicle and releases previous vehicle
+ * - If another driver was previously occupying this vehicle, disconnects them and sets them to OFFLINE
+ * - If the same driver taps again, confirms/keeps them ONLINE and paired
  */
 export async function processRfidTapEvent(
   deviceId: string,
@@ -228,51 +366,11 @@ export async function processRfidTapEvent(
   const driver = matchingDriverDoc.data() as DriverProfile;
   const driverUid = matchingDriverDoc.id;
 
-  // 3. CASE A: SAME DRIVER TAPS AGAIN (TAP-OUT / CLOCK OUT)
-  if (ebike.currentDriverId === driverUid) {
-    // Unassign E-Bike
-    await updateDoc(ebikeRef, {
-      currentDriverId: null,
-      currentDriverName: null,
-      currentDriverPhone: null,
-      status: 'AVAILABLE',
-      lastRfidCardUid: cleanRfid,
-      updatedAt: serverTimestamp(),
-    });
+  // 3. VEHICLE TRANSFER & DISPLACING LOGIC
 
-    // Toggle Driver to OFFLINE
-    await updateDoc(doc(db, 'drivers', driverUid), {
-      availability: 'OFFLINE',
-      activeEbikeId: null,
-      updatedAt: serverTimestamp(),
-    });
-
-    logActivity({
-      action: 'STATUS_CHANGE',
-      actionLabel: 'Driver Tapped Out',
-      entityType: 'SHUTTLE',
-      entityId: cleanDeviceId,
-      entityName: ebike.name,
-      summary: `Driver "${driver.fullName}" tapped out of shuttle "${ebike.name}" (OFFLINE)`,
-      details: {
-        summary: `RFID card tap-out recorded for vehicle ${cleanDeviceId}`,
-        after: { availability: 'OFFLINE', shuttleStatus: 'AVAILABLE' },
-      },
-      performedBy: { uid: driverUid, name: driver.fullName, role: 'driver' },
-      severity: 'info',
-    }).catch(() => {});
-
-    return {
-      success: true,
-      message: `Driver ${driver.fullName} tapped out of ${ebike.name}. Status toggled to OFFLINE.`,
-      action: 'TAP_OUT',
-    };
-  }
-
-  // 4. CASE B: NEW DRIVER TAPS IN (AUTOMATIC TAKEOVER)
-
-  // Subcase B1: Query ALL drivers in database currently paired to this E-Bike (cleanDeviceId) and disconnect them
+  // 3a. Disconnect and set to OFFLINE any previous driver(s) currently occupying THIS shuttle (if different from driverUid)
   let prevDriverNames: string[] = [];
+
   const activeDriversQuery = query(driversRef, where('activeEbikeId', '==', cleanDeviceId));
   const activeDriversSnap = await getDocs(activeDriversQuery);
 
@@ -284,13 +382,13 @@ export async function processRfidTapEvent(
         availability: 'OFFLINE',
         activeEbikeId: null,
         vehicleInfo: 'Unassigned E-Shuttle',
-        disconnectNotice: `Disconnected from ${ebike.name}: Driver ${driver.fullName} scanned a new RFID card on this vehicle.`,
+        disconnectNotice: `Disconnected from ${ebike.name}: Driver ${driver.fullName} tapped their RFID card on this vehicle.`,
         updatedAt: serverTimestamp(),
       });
     }
   }
 
-  // Also check ebike.currentDriverId if different from driverUid and not covered in query above
+  // Also verify ebike.currentDriverId if different from driverUid and not yet covered
   if (ebike.currentDriverId && ebike.currentDriverId !== driverUid) {
     const prevDriverRef = doc(db, 'drivers', ebike.currentDriverId);
     const prevDriverSnap = await getDoc(prevDriverRef);
@@ -303,7 +401,7 @@ export async function processRfidTapEvent(
         availability: 'OFFLINE',
         activeEbikeId: null,
         vehicleInfo: 'Unassigned E-Shuttle',
-        disconnectNotice: `Disconnected from ${ebike.name}: Driver ${driver.fullName} scanned a new RFID card on this vehicle.`,
+        disconnectNotice: `Disconnected from ${ebike.name}: Driver ${driver.fullName} tapped their RFID card on this vehicle.`,
         updatedAt: serverTimestamp(),
       });
     }
@@ -311,7 +409,7 @@ export async function processRfidTapEvent(
 
   const prevDriverName = prevDriverNames.join(', ');
 
-  // Subcase B2: If current driver was on another E-Bike previously, release that E-Bike
+  // 3b. Vehicle Transfer: If this tapping driver was previously on ANOTHER shuttle, release that shuttle
   if (driver.activeEbikeId && driver.activeEbikeId !== cleanDeviceId) {
     const prevBikeRef = doc(db, 'ebikes', driver.activeEbikeId);
     const prevBikeSnap = await getDoc(prevBikeRef);
@@ -326,24 +424,31 @@ export async function processRfidTapEvent(
     }
   }
 
-  // Assign New Driver to this E-Bike & Set Driver ONLINE
+  // 4. AUTOMATIC "TAP-TO-DRIVE" ACTIVATION
+  // Bind shuttle to driver & set status to IN_USE
   const vehicleInfo = `${ebike.name} (Plate #${ebike.serialNumber})`;
   await updateDoc(ebikeRef, {
     currentDriverId: driverUid,
     currentDriverName: driver.fullName,
-    currentDriverPhone: driver.phone,
+    currentDriverPhone: driver.phone || null,
     status: 'IN_USE',
     lastRfidCardUid: cleanRfid,
     updatedAt: serverTimestamp(),
   });
 
+  // Automatically switch driver availability to ONLINE
   const driverUpdates: Record<string, any> = {
     availability: 'ONLINE',
     activeEbikeId: cleanDeviceId,
     vehicleInfo,
-    disconnectNotice: null, // clear any previous disconnect notice
+    disconnectNotice: null, // Clear any previous disconnect notice
     updatedAt: serverTimestamp(),
   };
+
+  if (ebike.zoneId) {
+    driverUpdates.zoneId = ebike.zoneId;
+    driverUpdates.zoneName = ebike.zoneName;
+  }
 
   if (ebike.location) {
     driverUpdates.currentLocation = ebike.location;
@@ -359,23 +464,25 @@ export async function processRfidTapEvent(
   }
 
   const takeoverDetail = prevDriverName
-    ? ` Disconnected previous driver (${prevDriverName}).`
+    ? ` Displaced previous driver (${prevDriverName}).`
     : '';
 
+  // Log activity
   logActivity({
     action: 'STATUS_CHANGE',
-    actionLabel: 'Driver Tapped In',
+    actionLabel: 'Driver Tap-to-Drive Activated',
     entityType: 'SHUTTLE',
     entityId: cleanDeviceId,
     entityName: ebike.name,
-    summary: `Driver "${driver.fullName}" tapped in to shuttle "${ebike.name}" (ONLINE)${takeoverDetail}`,
+    summary: `Driver "${driver.fullName}" tapped RFID on "${ebike.name}" and went ONLINE (Automatic Tap-to-Drive)${takeoverDetail}`,
     details: {
-      summary: `RFID card tap-in authorized vehicle deployment`,
+      summary: `Automatic Tap-to-Drive RFID activation authorized vehicle deployment and activated driver to ONLINE status`,
       after: {
         driverUid,
         driverName: driver.fullName,
         availability: 'ONLINE',
         shuttleStatus: 'IN_USE',
+        vehicleInfo,
         prevDriverName: prevDriverName || null,
       },
     },
@@ -385,9 +492,63 @@ export async function processRfidTapEvent(
 
   return {
     success: true,
-    message: `Driver ${driver.fullName} successfully took over ${ebike.name}!${takeoverDetail} Driver is now ONLINE.`,
+    message: `Driver ${driver.fullName} tapped on ${ebike.name} and is now ONLINE (On Duty)!${takeoverDetail}`,
     action: 'TAP_IN',
   };
+}
+
+/**
+ * Unbind Driver from an E-Bike (sets driver to OFFLINE and releases shuttle)
+ */
+export async function unbindDriverFromEbike(
+  deviceId: string,
+  driverUid?: string,
+  reason: string = 'Driver went offline'
+): Promise<void> {
+  const cleanDeviceId = deviceId.trim().toUpperCase();
+  const ebikeRef = doc(db, 'ebikes', cleanDeviceId);
+  const ebikeSnap = await getDoc(ebikeRef).catch(() => null);
+  const ebike = ebikeSnap?.exists() ? (ebikeSnap.data() as EBikeDevice) : null;
+
+  const targetDriverUid = driverUid || ebike?.currentDriverId;
+
+  // Release e-bike
+  await updateDoc(ebikeRef, {
+    currentDriverId: null,
+    currentDriverName: null,
+    currentDriverPhone: null,
+    status: 'AVAILABLE',
+    updatedAt: serverTimestamp(),
+  });
+
+  // If driver identified, set to OFFLINE
+  if (targetDriverUid) {
+    const driverRef = doc(db, 'drivers', targetDriverUid);
+    const driverSnap = await getDoc(driverRef).catch(() => null);
+    const driverData = driverSnap?.exists() ? (driverSnap.data() as DriverProfile) : null;
+
+    await updateDoc(driverRef, {
+      availability: 'OFFLINE',
+      activeEbikeId: null,
+      vehicleInfo: 'Unassigned E-Shuttle',
+      updatedAt: serverTimestamp(),
+    });
+
+    logActivity({
+      action: 'STATUS_CHANGE',
+      actionLabel: 'Driver Released Vehicle',
+      entityType: 'SHUTTLE',
+      entityId: cleanDeviceId,
+      entityName: ebike?.name || cleanDeviceId,
+      summary: `Driver "${driverData?.fullName || targetDriverUid}" released shuttle "${ebike?.name || cleanDeviceId}" and is now OFFLINE`,
+      details: {
+        summary: reason,
+        after: { availability: 'OFFLINE', shuttleStatus: 'AVAILABLE' },
+      },
+      performedBy: { uid: targetDriverUid, name: driverData?.fullName || targetDriverUid, role: 'driver' },
+      severity: 'info',
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -407,7 +568,12 @@ export async function autoResolveRfidAssignment(
     (d) => d.rfidCardUid && normalizeRfidUid(d.rfidCardUid) === normalizedScannedRfid
   );
 
-  if (matchingDriver && bike.currentDriverId !== matchingDriver.uid) {
+  if (
+    matchingDriver &&
+    (bike.currentDriverId !== matchingDriver.uid ||
+      matchingDriver.availability !== 'ONLINE' ||
+      matchingDriver.activeEbikeId !== bike.deviceId)
+  ) {
     await processRfidTapEvent(bike.deviceId, cleanRfid);
     return true;
   }

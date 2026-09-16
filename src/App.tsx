@@ -16,6 +16,8 @@ import { PWAInstallButton } from './components/PWAInstallPrompt';
 import { ChatDrawer } from './components/Common/ChatDrawer';
 import { SupportTicketsModal } from './components/Common/SupportTicketsModal';
 import { NotificationModal } from './components/Common/NotificationModal';
+import { SessionInactivityHandler } from './components/Common/SessionInactivityHandler';
+import { PasswordExpiryNotification } from './components/Common/PasswordExpiryNotification';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
@@ -185,6 +187,12 @@ const MainAppContent: React.FC = () => {
         isOpen={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
       />
+
+      {/* Global 5-Minute Session Inactivity Timeout Watchdog & Warning Modal */}
+      <SessionInactivityHandler />
+
+      {/* Global Password Expiry & Day-Range Rotation Prompt */}
+      <PasswordExpiryNotification />
 
       {/* Bottom Navigation */}
       <BottomNav
