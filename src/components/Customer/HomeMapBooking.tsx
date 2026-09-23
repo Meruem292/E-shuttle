@@ -8,6 +8,7 @@ import {
   MapPin,
   Search,
   Phone,
+  MessageSquare,
   X,
   Star,
   Send,
@@ -57,6 +58,7 @@ import {
 } from '../Common/PickupNotificationBanner';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
 import { SuspendedAccountPortal } from '../Common/SuspendedAccountPortal';
+import { ChatDrawer } from '../Common/ChatDrawer';
 
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
@@ -102,6 +104,11 @@ export const HomeMapBooking: React.FC = () => {
   const [hasGpsAcquired, setHasGpsAcquired] = useState<boolean>(false);
   const [userLiveCoords, setUserLiveCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const hasGpsAcquiredRef = React.useRef<boolean>(false);
+
+  // Chat Drawer State
+  const [showChatDrawer, setShowChatDrawer] = useState<boolean>(false);
+  const [chatTargetDriver, setChatTargetDriver] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
+  const [chatBookingId, setChatBookingId] = useState<string | undefined>(undefined);
 
   // Auto-detect operational zone strictly based on user's REAL GPS coordinates (when acquired)
   useEffect(() => {
@@ -1079,16 +1086,39 @@ export const HomeMapBooking: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  {activeBooking.driverPhone && (
-                    <a
-                      href={`tel:${activeBooking.driverPhone}`}
-                      title="Direct call driver"
-                      className="px-3 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-transform uppercase flex items-center gap-1.5 border border-[#0D47A1]"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                      <span>Call</span>
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {activeBooking.driverId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeBooking && activeBooking.driverId) {
+                            setChatTargetDriver({
+                              id: activeBooking.driverId,
+                              name: activeBooking.driverName || 'E-Shuttle Driver',
+                              role: 'driver',
+                            });
+                            setChatBookingId(activeBooking.id);
+                            setShowChatDrawer(true);
+                          }
+                        }}
+                        title="Chat with driver"
+                        className="px-3 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-transform uppercase flex items-center gap-1.5 border border-[#0D47A1]"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-white" />
+                        <span>Chat</span>
+                      </button>
+                    )}
+                    {activeBooking.driverPhone && (
+                      <a
+                        href={`tel:${activeBooking.driverPhone}`}
+                        title="Direct call driver"
+                        className="px-3 py-2 bg-[#E3F2FD] hover:bg-[#0D47A1] hover:text-white text-[#0D47A1] font-bold text-xs rounded-xl shadow-md active:scale-95 transition-transform uppercase flex items-center gap-1.5 border border-[#0D47A1]"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Call</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 {/* Driver Info Card */}
@@ -1801,6 +1831,15 @@ export const HomeMapBooking: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* LIVE RIDE CHAT DRAWER */}
+      <ChatDrawer
+        isOpen={showChatDrawer}
+        onClose={() => setShowChatDrawer(false)}
+        initialBookingId={chatBookingId}
+        initialTargetUser={chatTargetDriver || undefined}
+        initialChannelType="booking"
+      />
     </div>
   );
 };

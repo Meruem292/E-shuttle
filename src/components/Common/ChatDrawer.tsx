@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import {
   MessageSquare,
   Send,
@@ -138,13 +140,45 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
+  // Monitor active ride status to lock chat when dropped off / completed
+  const [isRideCompleted, setIsRideCompleted] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!activeChannel?.bookingId) {
+      setIsRideCompleted(false);
+      return;
+    }
+
+    const bookingRef = doc(db, 'bookings', activeChannel.bookingId);
+    const unsub = onSnapshot(
+      bookingRef,
+      (snap) => {
+        if (snap.exists()) {
+          const status = snap.data().status;
+          if (status === 'COMPLETED' || status === 'CANCELLED') {
+            setIsRideCompleted(true);
+          } else {
+            setIsRideCompleted(false);
+          }
+        } else {
+          setIsRideCompleted(true);
+        }
+      },
+      () => {
+        setIsRideCompleted(false);
+      }
+    );
+
+    return () => unsub();
+  }, [activeChannel?.bookingId]);
+
   // Handle Send Message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    if (!inputText.trim() || !activeChannelId || sending) return;
+    if (!inputText.trim() || !activeChannelId || sending || isRideCompleted) return;
 
     const textToSend = inputText.trim();
     setInputText('');
@@ -297,11 +331,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             <div className="flex-1 flex flex-col bg-[#F8FAFC] overflow-hidden">
               {/* Messages Feed Scroll View */}
               <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
-                {/* Channel Security Banner */}
-                <div className="bg-[#E3F2FD] border border-[#0D47A1]/20 rounded-2xl p-2.5 text-center text-[10px] font-bold text-[#0D47A1] flex items-center justify-center gap-1.5 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-[#0D47A1]" />
-                  <span>Secure Support & Investigation Channel with Admin</span>
-                </div>
+                {/* Channel Security / Ride Status Banner */}
+                {isRideCompleted ? (
+                  <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-3 text-center text-xs font-black text-amber-900 flex items-center justify-center gap-2 shadow-sm animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Trip Dropped Off / Completed — Chatting with driver is now unavailable.</span>
+                  </div>
+                ) : (
+                  <div className="bg-[#E3F2FD] border border-[#0D47A1]/20 rounded-2xl p-2.5 text-center text-[10px] font-bold text-[#0D47A1] flex items-center justify-center gap-1.5 shadow-sm">
+                    <Sparkles className="w-3.5 h-3.5 text-[#0D47A1]" />
+                    <span>Active Ride Messaging & Coordination Channel</span>
+                  </div>
+                )}
 
                 {deduplicateMessages(messages).length === 0 ? (
                   <div className="text-center py-12 text-slate-400 space-y-2">
@@ -363,19 +404,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Suggestion Chips */}
-              <div className="bg-white border-t border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                {quickChips.map((chip, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setInputText(chip)}
-                    className="px-2.5 py-1 bg-[#E3F2FD] hover:bg-[#0D47A1] hover:text-white text-[#0D47A1] border border-[#0D47A1]/30 rounded-full text-[10px] font-bold shrink-0 transition-colors"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
+              {/* Quick Suggestion Chips (Only if ride is active) */}
+              {!isRideCompleted && (
+                <div className="bg-white border-t border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  {quickChips.map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setInputText(chip)}
+                      className="px-2.5 py-1 bg-[#E3F2FD] hover:bg-[#0D47A1] hover:text-white text-[#0D47A1] border border-[#0D47A1]/30 rounded-full text-[10px] font-bold shrink-0 transition-colors"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Message Input Bar */}
               <form
@@ -384,14 +427,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               >
                 <input
                   type="text"
-                  placeholder="Type your message..."
+                  disabled={isRideCompleted}
+                  placeholder={isRideCompleted ? "Trip completed — chat unavailable" : "Type your message..."}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  className="flex-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-2xl px-3.5 py-2 text-xs font-bold text-[#0D47A1] focus:outline-none focus:bg-white"
+                  className="flex-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-2xl px-3.5 py-2 text-xs font-bold text-[#0D47A1] focus:outline-none focus:bg-white disabled:opacity-50 disabled:bg-slate-100"
                 />
                 <button
                   type="submit"
-                  disabled={!inputText.trim() || sending}
+                  disabled={!inputText.trim() || sending || isRideCompleted}
                   className="bg-[#0D47A1] hover:bg-[#1565C0] text-white p-2.5 rounded-2xl shadow-md disabled:opacity-40 transition-transform active:scale-95 shrink-0"
                 >
                   <Send className="w-4 h-4" />

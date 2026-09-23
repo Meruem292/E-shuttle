@@ -10,6 +10,7 @@ import {
   CheckSquare,
   Zap,
   Phone,
+  MessageSquare,
   Bike,
   Info,
   X,
@@ -42,6 +43,7 @@ import {
 } from '../Common/PickupNotificationBanner';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
 import { SuspendedAccountPortal } from '../Common/SuspendedAccountPortal';
+import { ChatDrawer } from '../Common/ChatDrawer';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser, logout } = useAuth();
@@ -64,6 +66,11 @@ export const DriverHome: React.FC = () => {
   const [driverNotification, setDriverNotification] = useState<PickupNotificationData | null>(null);
   const prevRequestCountRef = React.useRef<number>(0);
   const driverAlerted300mRef = React.useRef<string | null>(null);
+
+  // Chat Drawer State
+  const [showChatDrawer, setShowChatDrawer] = useState<boolean>(false);
+  const [chatTargetUser, setChatTargetUser] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
+  const [chatBookingId, setChatBookingId] = useState<string | undefined>(undefined);
 
   // Sync driver profile state
   useEffect(() => {
@@ -590,11 +597,34 @@ export const DriverHome: React.FC = () => {
                 </span>
                 <h3 className="text-base font-black text-[#0D47A1]">{activeRide.customerName || 'User'}</h3>
               </div>
-              <div className="text-right">
-                <div className="inline-block bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
-                  Free Shuttle
-                </div>
-                <div className="text-[10px] text-slate-500 font-medium mt-0.5">{activeRide.distanceKm} km</div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChatTargetUser({
+                      id: activeRide.customerId,
+                      name: activeRide.customerName || 'Passenger',
+                      role: 'customer',
+                    });
+                    setChatBookingId(activeRide.id);
+                    setShowChatDrawer(true);
+                  }}
+                  className="py-1.5 px-2.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase flex items-center gap-1 transition-colors shadow-sm border border-[#0D47A1]"
+                  title="Open live chat with passenger"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-white" />
+                  <span>Chat</span>
+                </button>
+                {activeRide.customerPhone && activeRide.customerPhone !== 'N/A' && (
+                  <a
+                    href={`tel:${activeRide.customerPhone}`}
+                    className="py-1.5 px-2.5 bg-[#E3F2FD] hover:bg-[#0D47A1] hover:text-white text-[#0D47A1] rounded-xl text-xs font-bold uppercase flex items-center gap-1 transition-colors shadow-sm border border-[#0D47A1]"
+                    title="Call passenger"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>Call</span>
+                  </a>
+                )}
               </div>
             </div>
 
@@ -762,6 +792,15 @@ export const DriverHome: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* LIVE RIDE CHAT DRAWER */}
+      <ChatDrawer
+        isOpen={showChatDrawer}
+        onClose={() => setShowChatDrawer(false)}
+        initialBookingId={chatBookingId}
+        initialTargetUser={chatTargetUser || undefined}
+        initialChannelType="booking"
+      />
     </div>
   );
 };
