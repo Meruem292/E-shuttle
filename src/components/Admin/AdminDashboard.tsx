@@ -2622,7 +2622,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                       >
                         {ride.status}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">ID: {ride.id?.slice(0, 8)}</span>
+                      <span className="text-[10px] text-slate-500 font-bold">Trip Record</span>
                     </div>
 
                     <div className="text-[10px] text-slate-500 font-medium">{formatDate(ride.createdAt)}</div>
@@ -3385,7 +3385,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
               <div>
                 <h3 className="text-sm font-black text-[#0D47A1]">Trip Route & Details</h3>
-                <p className="text-[10px] text-slate-400 font-mono">ID: {selectedBookingModal.id}</p>
+                <p className="text-[10px] text-slate-500 font-bold">E-Shuttle Trip Record</p>
               </div>
               <button
                 onClick={() => setSelectedBookingModal(null)}
@@ -3633,7 +3633,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                                 {ticket.reporterRole} Appeal
                               </span>
                               <span className="text-xs font-black text-[#0D47A1]">
-                                {ticket.reporterName} ({ticket.reporterId})
+                                {ticket.reporterName}
                               </span>
                               <span className="text-[10px] text-slate-400 font-bold">
                                 Ticket #{ticket.ticketNumber}
@@ -4609,11 +4609,10 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
               <p className="font-bold">Are you sure you want to permanently delete this account?</p>
               <div className="bg-white/80 p-2.5 rounded-xl border border-rose-200 space-y-1">
                 <div className="font-black text-[#0D47A1] text-sm">{deleteConfirmTarget.name}</div>
-                <div className="text-[11px] text-slate-600 font-mono">
+                <div className="text-[11px] text-slate-600 font-medium">
                   Role: <span className="font-bold uppercase text-rose-700">{deleteConfirmTarget.role}</span>
                   {deleteConfirmTarget.email && ` • ${deleteConfirmTarget.email}`}
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono">ID: {deleteConfirmTarget.id}</div>
               </div>
               <p className="text-[11px] text-rose-700 font-medium">
                 This record will be permanently purged from the database, and this deletion event will be recorded in the system audit logs.

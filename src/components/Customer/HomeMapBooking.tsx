@@ -19,6 +19,7 @@ import {
   Compass,
   Layers,
   ArrowRight,
+  Headphones,
 } from 'lucide-react';
 import {
   calculateFare,
@@ -994,6 +995,24 @@ export const HomeMapBooking: React.FC = () => {
               className="bg-white/95 border-2 border-[#0D47A1] text-[#0D47A1] shadow-lg backdrop-blur-md hover:bg-slate-50 shrink-0"
               iconClassName="w-4 h-4 text-[#0D47A1]"
             />
+
+            {/* Admin Support Chat Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setChatTargetDriver({
+                  id: 'admin',
+                  name: 'E-Shuttle Support Desk',
+                  role: 'admin',
+                });
+                setChatBookingId(undefined);
+                setShowChatDrawer(true);
+              }}
+              title="Contact Admin Support"
+              className="p-1.5 sm:p-2 bg-white/95 border-2 border-[#0D47A1] text-[#0D47A1] rounded-full hover:bg-[#E3F2FD] shadow-lg backdrop-blur-md transition-all active:scale-95 shrink-0 flex items-center justify-center"
+            >
+              <Headphones className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-[#0D47A1]" />
+            </button>
           </div>
         </div>
       </div>
