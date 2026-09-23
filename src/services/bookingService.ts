@@ -196,7 +196,7 @@ export async function acceptBookingAtomic(
       throw new Error('This ride request has already been accepted by another driver.');
     }
 
-    // Verify driver is approved and online
+    // Verify driver is approved, online, paired to a device, and designated to the booking zone
     const driverDoc = await transaction.get(driverRef);
     if (!driverDoc.exists()) {
       throw new Error('Driver account not found.');
@@ -214,6 +214,24 @@ export async function acceptBookingAtomic(
     }
     if (driverData.availability === 'BUSY') {
       throw new Error('You already have an active ride.');
+    }
+    if (driverData.availability === 'OFFLINE') {
+      throw new Error('You must be ONLINE and on duty to accept bookings.');
+    }
+    if (!driverData.activeEbikeId) {
+      throw new Error('Device Pairing Required: You must be paired to an active E-Shuttle hardware unit (via RFID tap) to accept ride requests.');
+    }
+
+    // Zone Designation Enforcement
+    if (bookingData.zoneId) {
+      if (!driverData.zoneId) {
+        throw new Error(`Operational Zone Mismatch: You are not designated to any operational zone. This booking requires a driver assigned to "${bookingData.zoneName || bookingData.zoneId}".`);
+      }
+      if (driverData.zoneId !== bookingData.zoneId) {
+        throw new Error(`Operational Zone Mismatch: You are designated to "${driverData.zoneName || driverData.zoneId}", but this ride request is for "${bookingData.zoneName || bookingData.zoneId}". You cannot accept bookings outside your designated zone.`);
+      }
+    } else if (driverData.zoneId) {
+      throw new Error(`Operational Zone Mismatch: You are designated to zone "${driverData.zoneName || driverData.zoneId}", but this ride request has no assigned zone.`);
     }
 
     // Atomically assign booking
@@ -491,8 +509,13 @@ export function listenToNearbySearchingBookings(
       snapshot.forEach((docSnap) => {
         const b = { id: docSnap.id, ...docSnap.data() } as Booking;
 
-        // Zone filtering: If driver has an assigned zone, only show bookings from that zone
-        if (driverZoneId && b.zoneId && b.zoneId !== driverZoneId) {
+        // Strict Zone Filtering:
+        // 1. If booking belongs to a specific zone, only drivers designated to that zone can receive it
+        if (b.zoneId && b.zoneId !== driverZoneId) {
+          return;
+        }
+        // 2. If driver is designated to a specific zone, driver can only receive bookings from that zone
+        if (driverZoneId && b.zoneId !== driverZoneId) {
           return;
         }
 
@@ -575,10 +598,14 @@ export function listenToOnlineDrivers(callback: (drivers: DriverProfile[]) => vo
     (snapshot) => {
       const drivers: DriverProfile[] = [];
       snapshot.forEach((docSnap) => {
-        drivers.push({
-          uid: docSnap.id,
-          ...docSnap.data(),
-        } as DriverProfile);
+        const d = docSnap.data() as DriverProfile;
+        // Only display drivers that are currently paired with an active E-Shuttle device/unit
+        if (d.activeEbikeId) {
+          drivers.push({
+            uid: docSnap.id,
+            ...d,
+          } as DriverProfile);
+        }
       });
       callback(drivers);
     },

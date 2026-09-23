@@ -125,9 +125,15 @@ export const DriverHome: React.FC = () => {
     return () => unsub();
   }, [currentUser]);
 
-  // 2. Subscribe to nearby searching requests when driver is ONLINE and approved
+  // 2. Subscribe to nearby searching requests when driver is ONLINE, approved, and paired to an active E-Shuttle device
   useEffect(() => {
-    if (!driverProfile || driverProfile.accountStatus !== 'APPROVED' || availability !== 'ONLINE' || activeRide) {
+    if (
+      !driverProfile ||
+      driverProfile.accountStatus !== 'APPROVED' ||
+      availability !== 'ONLINE' ||
+      !driverProfile.activeEbikeId ||
+      activeRide
+    ) {
       setNearbyRequests([]);
       prevRequestCountRef.current = 0;
       return;
@@ -315,7 +321,11 @@ export const DriverHome: React.FC = () => {
           updatedAt: serverTimestamp(),
         });
         setAvailability('ONLINE');
-        toast.success('You are ONLINE. Ready to receive shuttle requests.');
+        if (!driverProfile.activeEbikeId) {
+          toast.warning('Hardware Device Required: Tap your RFID card on an E-Shuttle or pair a device to receive ride requests.');
+        } else {
+          toast.success('You are ONLINE. Ready to receive shuttle requests.');
+        }
       }
     } catch (err: any) {
       const errMsg = err.message || 'Failed to update availability.';
