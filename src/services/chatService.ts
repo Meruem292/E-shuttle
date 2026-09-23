@@ -459,7 +459,8 @@ export function subscribeToUserChannels(
   let q;
 
   if (role === 'admin') {
-    q = query(channelsRef);
+    // Admins only query channels where admin is explicitly an intended participant (Helpdesk/Dispatch/Investigation)
+    q = query(channelsRef, where('participants', 'array-contains', 'admin'));
   } else {
     q = query(channelsRef, where('participants', 'array-contains', uid));
   }
@@ -473,6 +474,17 @@ export function subscribeToUserChannels(
         const chans: ChatChannel[] = [];
         snapshot.forEach((d) => {
           const data = d.data() as ChatChannel;
+          
+          // Strict privacy enforcement: Admins can NEVER view private passenger-driver ride or direct chats
+          if (role === 'admin') {
+            if (data.channelType === 'booking' || data.channelType === 'user_driver') {
+              return;
+            }
+            if (!data.participants || !data.participants.includes('admin')) {
+              return;
+            }
+          }
+
           const updatedTime =
             data.updatedAt instanceof Timestamp
               ? data.updatedAt.toDate().toISOString()
@@ -527,7 +539,16 @@ export function subscribeToUserChannels(
 
 function filterLocalChannels(uid: string, role: 'customer' | 'driver' | 'admin'): ChatChannel[] {
   const all = getLocalChannels();
-  if (role === 'admin') return all;
+  if (role === 'admin') {
+    // Admins only see support & dispatch channels, never private ride conversations between passenger and driver
+    return all.filter(
+      (c) =>
+        c.participants &&
+        c.participants.includes('admin') &&
+        c.channelType !== 'booking' &&
+        c.channelType !== 'user_driver'
+    );
+  }
   return all.filter((c) => c.participants && c.participants.includes(uid));
 }
 

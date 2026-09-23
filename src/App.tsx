@@ -18,19 +18,21 @@ import { SupportTicketsModal } from './components/Common/SupportTicketsModal';
 import { NotificationModal } from './components/Common/NotificationModal';
 import { SessionInactivityHandler } from './components/Common/SessionInactivityHandler';
 import { PasswordExpiryNotification } from './components/Common/PasswordExpiryNotification';
+import { SuspendedAccountPortal } from './components/Common/SuspendedAccountPortal';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
-  const { role, currentUser, loading } = useAuth();
+  const { role, currentUser, userProfile, driverProfile, loading } = useAuth();
   const { logoUrl } = useAppLogo();
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [chatChannelId, setChatChannelId] = useState<string | undefined>(undefined);
   const [isSupportTicketsOpen, setIsSupportTicketsOpen] = useState<boolean>(false);
   const [initialTicketId, setInitialTicketId] = useState<string | undefined>(undefined);
   const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
   const tabHistoryRef = useRef<string[]>(['home']);
 
-  // Global listener to trigger notification modal and support tickets from anywhere
+  // Global listener to trigger notification modal, support tickets, and chat from anywhere
   useEffect(() => {
     const handleOpenModal = () => setIsNotificationOpen(true);
     const handleOpenTickets = (e: Event) => {
@@ -38,13 +40,20 @@ const MainAppContent: React.FC = () => {
       setInitialTicketId(customEvent.detail?.ticketId);
       setIsSupportTicketsOpen(true);
     };
+    const handleOpenChat = (e: Event) => {
+      const customEvent = e as CustomEvent<{ channelId?: string }>;
+      setChatChannelId(customEvent.detail?.channelId);
+      setIsChatOpen(true);
+    };
 
     window.addEventListener('eshuttle_open_notifications', handleOpenModal);
     window.addEventListener('eshuttle_open_support_tickets', handleOpenTickets);
+    window.addEventListener('eshuttle_open_chat', handleOpenChat);
 
     return () => {
       window.removeEventListener('eshuttle_open_notifications', handleOpenModal);
       window.removeEventListener('eshuttle_open_support_tickets', handleOpenTickets);
+      window.removeEventListener('eshuttle_open_chat', handleOpenChat);
     };
   }, []);
 
@@ -129,6 +138,19 @@ const MainAppContent: React.FC = () => {
     );
   }
 
+  // Account Suspension Enforcement & Appeal Portal
+  const isSuspended =
+    (role === 'driver' && driverProfile?.accountStatus === 'SUSPENDED') ||
+    (role === 'customer' && userProfile?.accountStatus === 'SUSPENDED');
+
+  if (isSuspended) {
+    return (
+      <div className="h-full w-full bg-slate-900 flex flex-col overflow-hidden select-none">
+        <SuspendedAccountPortal />
+      </div>
+    );
+  }
+
   // Fallback tab computation to guarantee no blank screen is rendered before/during state updates
   const customerTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
   const driverTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
@@ -165,7 +187,11 @@ const MainAppContent: React.FC = () => {
       {/* Global Live Chat Drawer */}
       <ChatDrawer
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        initialChannelId={chatChannelId}
+        onClose={() => {
+          setIsChatOpen(false);
+          setChatChannelId(undefined);
+        }}
         onOpenSupportTickets={() => {
           setIsChatOpen(false);
           setIsSupportTicketsOpen(true);

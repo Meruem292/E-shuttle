@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { ShieldAlert, MessageSquare, LogOut, Clock, Send, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { createIncidentTicket } from '../../services/ticketService';
 import { getOrCreateChannel } from '../../services/chatService';
+import { ChatDrawer } from './ChatDrawer';
 
 interface SuspendedAccountPortalProps {
   onOpenChatWithAdmin?: (channelId?: string) => void;
@@ -17,6 +18,9 @@ export const SuspendedAccountPortal: React.FC<SuspendedAccountPortalProps> = ({ 
   const [appealReason, setAppealReason] = useState('');
   const [submittingAppeal, setSubmittingAppeal] = useState(false);
   const [appealSubmitted, setAppealSubmitted] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [openingChat, setOpeningChat] = useState(false);
 
   const suspendedUntil = profile?.suspendedUntil;
   const isPermanent = !suspendedUntil || suspendedUntil === 0;
@@ -57,6 +61,7 @@ export const SuspendedAccountPortal: React.FC<SuspendedAccountPortalProps> = ({ 
   };
 
   const handleOpenChat = async () => {
+    setOpeningChat(true);
     try {
       const reporterId = profile?.uid || currentUser?.uid || 'user';
       const reporterName = profile?.fullName || 'User';
@@ -72,18 +77,17 @@ export const SuspendedAccountPortal: React.FC<SuspendedAccountPortalProps> = ({ 
         'Suspension Appeal & Review'
       );
 
+      setActiveChannelId(channelId);
+      setIsChatOpen(true);
+
       if (onOpenChatWithAdmin) {
         onOpenChatWithAdmin(channelId);
-      } else {
-        window.dispatchEvent(
-          new CustomEvent('eshuttle_open_chat', {
-            detail: { channelId },
-          })
-        );
       }
     } catch (e) {
       console.error('Error opening support chat:', e);
       toast.error('Failed to open admin support chat.');
+    } finally {
+      setOpeningChat(false);
     }
   };
 
@@ -115,65 +119,81 @@ export const SuspendedAccountPortal: React.FC<SuspendedAccountPortalProps> = ({ 
           </p>
         </div>
 
-        {/* Investigation Chat & Appeal Actions */}
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={handleOpenChat}
-              className="w-full py-3 px-4 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
-            >
-              <MessageSquare className="w-4 h-4 text-[#90CAF9]" />
-              <span>Chat with Admin (Investigation)</span>
-            </button>
-            <button
-              onClick={logout}
-              className="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all"
-            >
-              <LogOut className="w-4 h-4 text-slate-400" />
-              <span>Log Out</span>
-            </button>
+          {/* Investigation Chat & Appeal Actions */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleOpenChat}
+                disabled={openingChat}
+                className="w-full py-3 px-4 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all disabled:opacity-60"
+              >
+                <MessageSquare className="w-4 h-4 text-[#90CAF9]" />
+                <span>{openingChat ? 'Connecting Chat...' : 'Chat with Admin (Investigation)'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <LogOut className="w-4 h-4 text-slate-400" />
+                <span>Log Out</span>
+              </button>
+            </div>
+
+            {/* Appeal Submission Form */}
+            <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-4 space-y-3">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span>Submit Formal Appeal for Review</span>
+              </h2>
+
+              {appealSubmitted ? (
+                <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 flex items-center gap-3 text-emerald-300 text-xs">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="font-bold">Appeal Submitted Successfully</div>
+                    <div className="text-[11px] text-emerald-400/80">Our compliance team is reviewing your case. You can discuss details directly in the Admin Investigation Chat.</div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitAppeal} className="space-y-3">
+                  <textarea
+                    rows={3}
+                    value={appealReason}
+                    onChange={(e) => setAppealReason(e.target.value)}
+                    placeholder="Provide context, explanation, or details regarding why this suspension should be reviewed or lifted..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#0D47A1] transition-colors resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submittingAppeal}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl uppercase tracking-wider flex items-center gap-1.5 shadow-md disabled:opacity-50 active:scale-95 transition-all"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{submittingAppeal ? 'Submitting Appeal...' : 'Submit Appeal'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
 
-          {/* Appeal Submission Form */}
-          <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-4 space-y-3">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <span>Submit Formal Appeal for Review</span>
-            </h2>
-
-            {appealSubmitted ? (
-              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 flex items-center gap-3 text-emerald-300 text-xs">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <div>
-                  <div className="font-bold">Appeal Submitted Successfully</div>
-                  <div className="text-[11px] text-emerald-400/80">Our compliance team is reviewing your case. You will be notified via chat.</div>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitAppeal} className="space-y-3">
-                <textarea
-                  rows={3}
-                  value={appealReason}
-                  onChange={(e) => setAppealReason(e.target.value)}
-                  placeholder="Provide context, explanation, or details regarding why this suspension should be reviewed or lifted..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#0D47A1] transition-colors resize-none"
-                />
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={submittingAppeal}
-                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl uppercase tracking-wider flex items-center gap-1.5 shadow-md disabled:opacity-50 active:scale-95 transition-all"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{submittingAppeal ? 'Submitting Appeal...' : 'Submit Appeal'}</span>
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
         </div>
 
+        {/* Real-time Investigation Chat with Admin */}
+        <ChatDrawer
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          initialChannelId={activeChannelId || undefined}
+          initialTargetUser={{
+            id: 'admin',
+            name: 'E-Shuttle Admin Support',
+            role: 'admin',
+          }}
+          initialChannelType={role === 'driver' ? 'driver_admin' : 'user_admin'}
+        />
       </div>
-    </div>
-  );
-};
+    );
+  };

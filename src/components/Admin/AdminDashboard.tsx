@@ -29,6 +29,7 @@ import { useAdminPin } from '../../contexts/AdminPinContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AdminPinSettingsCard } from './AdminPinSettingsCard';
 import { PasswordManagementCard } from '../Common/PasswordManagementCard';
+import { ChatDrawer } from '../Common/ChatDrawer';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import {
@@ -48,7 +49,6 @@ import {
   formatRfidUid,
 } from '../../utils/validation';
 import { verifyDriverLicenseImage, LicenseVerificationResult } from '../../services/licenseVerificationService';
-import { ChatDrawer } from '../Common/ChatDrawer';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import { NotificationBellButton } from '../Common/NotificationBellButton';
 import {
@@ -61,6 +61,7 @@ import {
 } from '../../services/ticketService';
 import {
   subscribeToUserChannels,
+  getOrCreateChannel,
   ChatChannel,
 } from '../../services/chatService';
 import { logActivity } from '../../services/activityLogService';
@@ -1050,7 +1051,14 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
     });
 
     const unsubChannels = subscribeToUserChannels('admin', 'admin', (chans) => {
-      setSupportChannels(chans);
+      // Defense in depth: Admins only manage live helpdesk/dispatch/ticket support channels
+      const helpdeskOnly = chans.filter(
+        (c) =>
+          c.channelType === 'user_admin' ||
+          c.channelType === 'driver_admin' ||
+          (c.participants?.includes('admin') && c.channelType !== 'booking' && c.channelType !== 'user_driver')
+      );
+      setSupportChannels(helpdeskOnly);
     });
 
     return () => {
@@ -3656,7 +3664,22 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             </span>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => setSelectedTicketChannelId(ticket.channelId)}
+                                onClick={async () => {
+                                  if (ticket.channelId) {
+                                    setSelectedTicketChannelId(ticket.channelId);
+                                  } else {
+                                    const ctype = ticket.reporterRole === 'driver' ? 'driver_admin' : 'user_admin';
+                                    const cid = await getOrCreateChannel(
+                                      ctype,
+                                      { id: 'admin', name: 'Platform Administrator', role: 'admin' },
+                                      { id: ticket.reporterId, name: ticket.reporterName, role: (ticket.reporterRole as any) || 'customer' },
+                                      undefined,
+                                      `Investigation: ${ticket.reporterName}`,
+                                      'Suspension Appeal & Review'
+                                    );
+                                    setSelectedTicketChannelId(cid);
+                                  }
+                                }}
                                 className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] font-black text-xs rounded-xl shadow flex items-center gap-1 active:scale-95 transition-transform"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -3963,6 +3986,30 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                       {/* Direct Incident Action Buttons */}
                       <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2 items-center justify-between">
                         <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (ticket.channelId) {
+                                setSelectedTicketChannelId(ticket.channelId);
+                              } else {
+                                const ctype = ticket.reporterRole === 'driver' ? 'driver_admin' : 'user_admin';
+                                const cid = await getOrCreateChannel(
+                                  ctype,
+                                  { id: 'admin', name: 'Platform Administrator', role: 'admin' },
+                                  { id: ticket.reporterId, name: ticket.reporterName, role: (ticket.reporterRole as any) || 'customer' },
+                                  undefined,
+                                  `Investigation: ${ticket.reporterName}`,
+                                  `Ticket #${ticket.ticketNumber} - ${ticket.subject}`
+                                );
+                                setSelectedTicketChannelId(cid);
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-[#90CAF9]" />
+                            <span>Chat with Reporter</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => setAdminWarningModal({ ticket, reason: '' })}
@@ -4819,6 +4866,17 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
         onClose={() => setIsTutorialOpen(false)}
         onNavigateTab={(tab) => setActiveTab(tab)}
         initialStepIndex={tutorialInitialStep}
+      />
+
+      {/* Admin Real-Time Support, Dispatch & Investigation Chat Drawer */}
+      <ChatDrawer
+        isOpen={selectedTicketChannelId !== null || directChatTarget !== null}
+        initialChannelId={selectedTicketChannelId}
+        initialTargetUser={directChatTarget || undefined}
+        onClose={() => {
+          setSelectedTicketChannelId(null);
+          setDirectChatTarget(null);
+        }}
       />
     </div>
   );
