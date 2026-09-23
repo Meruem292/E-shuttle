@@ -105,15 +105,15 @@ export const HomeMapBooking: React.FC = () => {
 
   // Auto-detect operational zone strictly based on user's REAL GPS coordinates (when acquired)
   useEffect(() => {
-    // CRITICAL: Do NOT fake GPS zone detection if real device GPS has not been acquired!
-    if (!hasGpsAcquired || !pickup.latitude || !pickup.longitude || zones.length === 0) {
+    // CRITICAL: Must use userLiveCoords (the actual phone GPS), NOT an unverified pickup fallback point!
+    if (!hasGpsAcquired || !userLiveCoords || zones.length === 0) {
       setDetectedUserZone(null);
       return;
     }
 
-    // 1. Try to find zone matching real coordinates directly
-    const nearest = findNearestZone(pickup.latitude, pickup.longitude, zones, stations);
-    if (nearest.nearestZone) {
+    // Check if user is ACTUALLY inside an active zone boundary or station pin catchment
+    const nearest = findNearestZone(userLiveCoords.latitude, userLiveCoords.longitude, zones, stations);
+    if (nearest.nearestZone && nearest.isWithinBoundary) {
       setDetectedUserZone(nearest.nearestZone);
       if (selectedZoneId === 'all' || selectedZoneId === 'auto') {
         setSelectedZoneId(nearest.nearestZone.id);
@@ -121,21 +121,9 @@ export const HomeMapBooking: React.FC = () => {
       return;
     }
 
-    // 2. Fallback: check if nearest station has a zone ID
-    const stationCheck = checkLocationWithinStationArea(pickup.latitude, pickup.longitude, stations);
-    if (stationCheck.nearestStation?.zoneId) {
-      const matchedZone = zones.find((z) => z.id === stationCheck.nearestStation!.zoneId);
-      if (matchedZone) {
-        setDetectedUserZone(matchedZone);
-        if (selectedZoneId === 'all' || selectedZoneId === 'auto') {
-          setSelectedZoneId(matchedZone.id);
-        }
-        return;
-      }
-    }
-
+    // If user's real GPS is outside ALL operational zones / station pins:
     setDetectedUserZone(null);
-  }, [hasGpsAcquired, pickup.latitude, pickup.longitude, zones, stations]);
+  }, [hasGpsAcquired, userLiveCoords, zones, stations]);
 
   // Auto-acquire device GPS immediately upon opening the app
   useEffect(() => {
@@ -849,10 +837,13 @@ export const HomeMapBooking: React.FC = () => {
     const zoneStations = targetZone ? getStationsForZone(targetZone, activeSts) : [];
 
     if (zoneStations.length > 0) {
+      const refLat = userLiveCoords?.latitude ?? pickup.latitude;
+      const refLng = userLiveCoords?.longitude ?? pickup.longitude;
+
       let nearest = zoneStations[0];
       let minDist = Infinity;
       for (const st of zoneStations) {
-        const dist = calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude);
+        const dist = calculateDistanceMeters(refLat, refLng, st.latitude, st.longitude);
         if (dist < minDist) {
           minDist = dist;
           nearest = st;
@@ -1173,16 +1164,24 @@ export const HomeMapBooking: React.FC = () => {
                   <Compass className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                   <span>GPS: {detectedUserZone.name}</span>
                 </span>
+              ) : hasGpsAcquired && !detectedUserZone ? (
+                <span
+                  title="Your phone GPS is currently outside active service zones"
+                  className="text-[9px] bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-1 rounded-full font-extrabold flex items-center gap-1 shrink-0"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>GPS: Outside Service Area</span>
+                </span>
               ) : (
-                  <button
-                    type="button"
-                    onClick={handleUseCurrentGpsLocation}
-                    className="text-[9px] bg-[#E3F2FD] hover:bg-[#0D47A1] text-[#0D47A1] hover:text-white border border-[#0D47A1]/40 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-sm"
-                    title="Trigger GPS permission to detect your operational zone"
-                  >
-                    <Compass className="w-3.5 h-3.5" />
-                    <span>Detect Zone</span>
-                  </button>
+                <button
+                  type="button"
+                  onClick={handleUseCurrentGpsLocation}
+                  className="text-[9px] bg-[#E3F2FD] hover:bg-[#0D47A1] text-[#0D47A1] hover:text-white border border-[#0D47A1]/40 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-sm"
+                  title="Trigger GPS permission to detect your operational zone"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Detect Zone</span>
+                </button>
               )}
             </div>
 
@@ -1202,7 +1201,12 @@ export const HomeMapBooking: React.FC = () => {
                 </div>
               ) : (
                 zones.map((z) => {
-                  const isGpsMatch = hasGpsAcquired && detectedUserZone?.id === z.id;
+                  const isGpsMatch = Boolean(
+                    hasGpsAcquired &&
+                    userLiveCoords &&
+                    detectedUserZone?.id === z.id &&
+                    checkLocationWithinZone(userLiveCoords.latitude, userLiveCoords.longitude, z, activeStations).isWithinZone
+                  );
                   const stationCount = getStationsForZone(z, activeStations).length;
 
                   return (

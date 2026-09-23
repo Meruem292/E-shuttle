@@ -350,8 +350,7 @@ export async function deleteOperationalZone(id: string, nameHint?: string): Prom
 }
 
 /**
- * Validates if a user's GPS coordinates are within a zone's operational boundary radius.
- * Geofencing starts with the station pins registered under that zone (e.g. 100m catchment from pins).
+ * Validates if a user's GPS coordinates are within a zone's operational boundary radius or station pins.
  */
 export function checkLocationWithinZone(
   lat: number,
@@ -360,11 +359,10 @@ export function checkLocationWithinZone(
   stations: ShuttleStation[] = []
 ): { isWithinZone: boolean; distanceMeters: number; nearestStation?: ShuttleStation | null } {
   const zonePins = getStationsForZone(zone, stations);
+  let minPinDist = Infinity;
+  let closestPin: ShuttleStation | null = null;
 
   if (zonePins.length > 0) {
-    let minPinDist = Infinity;
-    let closestPin: ShuttleStation | null = null;
-
     for (const pin of zonePins) {
       const distKm = calculateDistanceKm(lat, lng, pin.latitude, pin.longitude);
       const distMeters = Math.round(distKm * 1000);
@@ -373,32 +371,38 @@ export function checkLocationWithinZone(
         closestPin = pin;
       }
     }
-
-    const pinCatchmentRadius = closestPin?.radiusMeters || 100;
-    return {
-      isWithinZone: minPinDist <= pinCatchmentRadius,
-      distanceMeters: minPinDist,
-      nearestStation: closestPin,
-    };
   }
 
-  // Fallback if no station pins are under the zone yet
-  if (!zone.centerLatitude || !zone.centerLongitude) {
-    return { isWithinZone: true, distanceMeters: 0 };
+  // Calculate distance to zone center
+  let distToCenterMeters = Infinity;
+  if (typeof zone.centerLatitude === 'number' && typeof zone.centerLongitude === 'number') {
+    const centerDistKm = calculateDistanceKm(lat, lng, zone.centerLatitude, zone.centerLongitude);
+    distToCenterMeters = Math.round(centerDistKm * 1000);
   }
 
-  const distKm = calculateDistanceKm(lat, lng, zone.centerLatitude, zone.centerLongitude);
-  const distanceMeters = Math.round(distKm * 1000);
-  const maxRadiusMeters = zone.radiusMeters || 100;
+  const zoneRadius = zone.radiusMeters || 1500;
+  const pinRadius = closestPin?.radiusMeters || 100;
+
+  // Is within zone if within center geofence radius OR within catchment of any station pin in the zone
+  const isWithinCenterGeofence = distToCenterMeters <= zoneRadius;
+  const isWithinPinCatchment = minPinDist <= pinRadius;
+  const isWithinZone = isWithinCenterGeofence || isWithinPinCatchment;
+
+  const effectiveDist = Math.min(
+    minPinDist !== Infinity ? minPinDist : Infinity,
+    distToCenterMeters !== Infinity ? distToCenterMeters : Infinity
+  );
 
   return {
-    isWithinZone: distanceMeters <= maxRadiusMeters,
-    distanceMeters,
+    isWithinZone,
+    distanceMeters: effectiveDist === Infinity ? 0 : effectiveDist,
+    nearestStation: closestPin,
   };
 }
 
 /**
- * Finds the closest active zone to a given GPS location based on station pins under each zone
+ * Finds the closest active zone to a given GPS location based on station pins under each zone.
+ * Only sets isWithinBoundary to true if the GPS is actually within the zone radius or station catchment.
  */
 export function findNearestZone(
   lat: number,
@@ -411,6 +415,20 @@ export function findNearestZone(
     return { nearestZone: null, distanceMeters: 0, isWithinBoundary: false, nearestStation: null };
   }
 
+  // 1. First priority: Check if user is actually WITHIN any active zone
+  for (const zone of activeZones) {
+    const check = checkLocationWithinZone(lat, lng, zone, stations);
+    if (check.isWithinZone) {
+      return {
+        nearestZone: zone,
+        distanceMeters: check.distanceMeters,
+        isWithinBoundary: true,
+        nearestStation: check.nearestStation || null,
+      };
+    }
+  }
+
+  // 2. If outside all zones, identify mathematically closest zone with isWithinBoundary: false
   let closestZone: OperationalZone | null = null;
   let minZoneDistance = Infinity;
   let closestStationPin: ShuttleStation | null = null;
@@ -424,13 +442,10 @@ export function findNearestZone(
     }
   }
 
-  const allowedRadius = closestStationPin?.radiusMeters || closestZone?.radiusMeters || 100;
-  const isWithin = closestZone ? minZoneDistance <= allowedRadius : false;
-
   return {
     nearestZone: closestZone,
     distanceMeters: Math.round(minZoneDistance),
-    isWithinBoundary: isWithin,
+    isWithinBoundary: false,
     nearestStation: closestStationPin,
   };
 }
