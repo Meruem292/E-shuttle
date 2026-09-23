@@ -14,25 +14,23 @@ import { STATIONS_COLLECTION } from './stationService';
 export function isStationInZone(station: ShuttleStation, zone: OperationalZone): boolean {
   if (!station || !zone) return false;
 
-  // 1. Direct ID match
-  if (station.zoneId && station.zoneId === zone.id) {
-    return true;
+  // 1. Direct ID match: If station has an explicit zoneId, it MUST match this zone
+  if (station.zoneId) {
+    return station.zoneId === zone.id;
   }
 
-  // 2. Name / Code match (handles re-seeded or renamed zones)
+  // 2. Direct Name / Code match: If station has a zoneName, it MUST match this zone's name or code
   if (station.zoneName) {
     const cleanStationZoneName = station.zoneName.trim().toLowerCase();
     const cleanZoneName = (zone.name || '').trim().toLowerCase();
     const cleanZoneCode = (zone.code || '').trim().toLowerCase();
-    if (
+    return (
       cleanStationZoneName === cleanZoneName ||
-      (cleanZoneCode && cleanStationZoneName === cleanZoneCode)
-    ) {
-      return true;
-    }
+      (cleanZoneCode !== '' && cleanStationZoneName === cleanZoneCode)
+    );
   }
 
-  // 3. Spatial Geofence Containment
+  // 3. Spatial Geofence Containment: ONLY used as a fallback for unassigned stations without zoneId / zoneName
   if (
     typeof station.latitude === 'number' &&
     typeof station.longitude === 'number' &&
@@ -47,9 +45,7 @@ export function isStationInZone(station: ShuttleStation, zone: OperationalZone):
     );
     const distMeters = Math.round(distKm * 1000);
     const allowedRadius = zone.radiusMeters || 1500;
-    if (distMeters <= allowedRadius) {
-      return true;
-    }
+    return distMeters <= allowedRadius;
   }
 
   return false;

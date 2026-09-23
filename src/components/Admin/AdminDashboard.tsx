@@ -18,6 +18,7 @@ import { EBikeManagement } from './EBikeManagement';
 import { AdminEBikeMap } from './AdminEBikeMap';
 import { StationManagement } from './StationManagement';
 import { ZoneManagement } from './ZoneManagement';
+import { AdminAnalyticsWidget } from './AdminAnalyticsWidget';
 import ActivityLogsView from './ActivityLogsView';
 import { AdminTutorialModal } from './AdminTutorialModal';
 import { listenToOperationalZones } from '../../services/zoneService';
@@ -1491,10 +1492,10 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
   const pageHeader = getPageHeaderInfo();
 
   return (
-    <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-3 sm:p-5 pb-36 max-w-5xl mx-auto space-y-5">
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-[#E3F2FD] text-[#0D47A1] p-3 sm:p-5 pb-36 max-w-6xl w-full mx-auto space-y-5">
       {/* Dynamic Page Title Header Bar */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        <div className="flex items-center gap-3 min-w-0">
           <img
             src={activeAppLogo}
             onError={(e) => {
@@ -1504,7 +1505,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             alt="E-Shuttle Official Logo"
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <h1 className="text-sm sm:text-base font-black text-[#0D47A1] whitespace-nowrap">
                 {pageHeader.title}
@@ -1525,35 +1526,35 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0">
           <button
             onClick={() => {
               setTutorialInitialStep(0);
               setIsTutorialOpen(true);
             }}
-            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 border-2 border-amber-500 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
+            className="px-2.5 sm:px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 border-2 border-amber-500 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
             title="Open Simple Walkthrough: How to use E-Shuttle"
           >
             <BookOpen className="w-3.5 h-3.5 text-slate-900" />
-            <span className="hidden sm:inline">How to Use</span>
+            <span className="inline">How to Use</span>
           </button>
 
           <button
             onClick={() => setIsFaqOpen(true)}
-            className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
+            className="px-2.5 sm:px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
             title="View Official Program Specs, FAQs, Routes & Developer Team"
           >
             <HelpCircle className="w-3.5 h-3.5 text-amber-300" />
-            <span className="hidden sm:inline">Info & FAQs</span>
+            <span className="inline">Info & FAQs</span>
           </button>
 
           <button
             onClick={() => setIsSupportChatsModalOpen(true)}
-            className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all relative"
+            className="px-2.5 sm:px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all relative"
             title="Open Live Dispatch & Support Chats"
           >
             <MessageSquare className="w-3.5 h-3.5 text-white" />
-            <span className="hidden sm:inline">Dispatch Chats</span>
+            <span className="inline">Dispatch Chats</span>
             {supportChannels.filter((c) => (c.unreadCounts?.['admin'] || 0) > 0).length > 0 && (
               <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 bg-rose-600 text-white font-black text-[9px] rounded-full animate-bounce">
                 {supportChannels.reduce((sum, c) => sum + (c.unreadCounts?.['admin'] || 0), 0) || supportChannels.length}
@@ -1568,11 +1569,11 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
 
           <button
             onClick={logout}
-            className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
+            className="px-2.5 sm:px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
             title="Sign out of administrator session"
           >
             <LogOut className="w-3.5 h-3.5 text-[#0D47A1]" />
-            <span className="hidden sm:inline">Sign Out</span>
+            <span className="inline">Sign Out</span>
           </button>
         </div>
       </div>
@@ -1840,6 +1841,14 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
+          {/* RIDE VOLUME, PEAK HOURS & SERVICE UTILIZATION ANALYTICS WIDGET */}
+          <AdminAnalyticsWidget
+            bookings={allBookings}
+            drivers={drivers}
+            zones={zones}
+            onNavigateToRides={() => setActiveTab('rides')}
+          />
+
           {/* INTEGRATED LIVE MAP */}
           <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-md">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1988,7 +1997,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
           VIEW 2: UNIFIED USERS & DRIVERS MANAGEMENT PORTAL
          ========================================================================= */}
       {(currentTab === 'users' || currentTab === 'customers' || currentTab === 'drivers') && (
-        <div className="space-y-4 animate-in fade-in duration-200">
+        <div className="space-y-4 animate-in fade-in duration-200 w-full min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
@@ -1997,7 +2006,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   setCreateError(null);
                   setShowCreateAccountModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                className="px-3.5 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0"
                 title="Create a new user or driver account"
               >
                 <Plus className="w-4 h-4" />
@@ -2006,7 +2015,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Unified Search Input */}
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-80">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
@@ -2018,76 +2027,78 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Sub-tab Pill Switcher */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-            <button
-              onClick={() => setUserTabRole('ALL')}
-              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors ${
-                userTabRole === 'ALL'
-                  ? 'bg-[#0D47A1] text-white shadow-md'
-                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
-              }`}
-            >
-              All Accounts ({customersOnly.length + drivers.length + adminsOnly.length})
-            </button>
+          {/* Sub-tab Pill Switcher & Status Filter */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap pb-1">
+              <button
+                onClick={() => setUserTabRole('ALL')}
+                className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors ${
+                  userTabRole === 'ALL'
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                All Accounts ({customersOnly.length + drivers.length + adminsOnly.length})
+              </button>
 
-            <button
-              onClick={() => setUserTabRole('CUSTOMERS')}
-              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
-                userTabRole === 'CUSTOMERS'
-                  ? 'bg-[#0D47A1] text-white shadow-md'
-                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Users ({customersOnly.length})</span>
-            </button>
+              <button
+                onClick={() => setUserTabRole('CUSTOMERS')}
+                className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                  userTabRole === 'CUSTOMERS'
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Users ({customersOnly.length})</span>
+              </button>
 
-            <button
-              onClick={() => setUserTabRole('DRIVERS')}
-              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
-                userTabRole === 'DRIVERS'
-                  ? 'bg-[#0D47A1] text-white shadow-md'
-                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Drivers ({drivers.length})</span>
-            </button>
+              <button
+                onClick={() => setUserTabRole('DRIVERS')}
+                className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                  userTabRole === 'DRIVERS'
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Drivers ({drivers.length})</span>
+              </button>
 
-            <button
-              onClick={() => setUserTabRole('ADMINS')}
-              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
-                userTabRole === 'ADMINS'
-                  ? 'bg-[#0D47A1] text-white shadow-md'
-                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admins ({adminsOnly.length})</span>
-            </button>
+              <button
+                onClick={() => setUserTabRole('ADMINS')}
+                className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                  userTabRole === 'ADMINS'
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Admins ({adminsOnly.length})</span>
+              </button>
 
-            <button
-              onClick={() => setUserTabRole('PENDING')}
-              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
-                userTabRole === 'PENDING'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : pendingDrivers.length > 0
-                  ? 'bg-amber-50 text-amber-800 border-2 border-amber-400 hover:bg-amber-100'
-                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Pending Approvals ({pendingDrivers.length})</span>
-            </button>
+              <button
+                onClick={() => setUserTabRole('PENDING')}
+                className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                  userTabRole === 'PENDING'
+                    ? 'bg-amber-600 text-white shadow-md'
+                    : pendingDrivers.length > 0
+                    ? 'bg-amber-50 text-amber-800 border-2 border-amber-400 hover:bg-amber-100'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Pending Approvals ({pendingDrivers.length})</span>
+              </button>
+            </div>
 
             {/* Status Filter Dropdown */}
-            <div className="ml-auto flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-bold text-slate-500 uppercase hidden sm:inline">Status:</span>
+            <div className="flex items-center gap-1.5 shrink-0 self-start md:self-auto">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Status:</span>
               <select
                 value={accountStatusFilter}
                 onChange={(e) => setAccountStatusFilter(e.target.value)}
-                className="px-2.5 py-1 bg-white border-2 border-[#0D47A1] rounded-xl text-xs font-bold text-[#0D47A1] focus:outline-none"
+                className="px-2.5 py-1 bg-white border-2 border-[#0D47A1] rounded-xl text-xs font-bold text-[#0D47A1] focus:outline-none cursor-pointer"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="ACTIVE">Active / Approved</option>
@@ -2099,10 +2110,10 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Accounts Directory Grid */}
-          <div className="space-y-3">
+          <div className="space-y-3 w-full min-w-0">
             {/* Show Drivers if Role is ALL, DRIVERS, or PENDING */}
             {(userTabRole === 'ALL' || userTabRole === 'DRIVERS' || userTabRole === 'PENDING') && (
-              <div className="space-y-3">
+              <div className="space-y-3 w-full min-w-0">
                 {userTabRole === 'ALL' && (
                   <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
                     <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
@@ -2131,20 +2142,20 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                   filteredDrivers.map((dr) => (
                     <div
                       key={dr.uid}
-                      className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1]"
+                      className="bg-white border-2 border-[#0D47A1] rounded-2xl p-3.5 sm:p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 sm:gap-4 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1] w-full min-w-0"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm">
+                      <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm mt-0.5 sm:mt-0">
                           {dr.fullName?.charAt(0) || 'D'}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D47A1] text-white shadow-sm">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D47A1] text-white shadow-sm shrink-0">
                               DRIVER
                             </span>
-                            <h3 className="font-black text-sm text-[#0D47A1]">{dr.fullName}</h3>
+                            <h3 className="font-black text-sm text-[#0D47A1] break-words">{dr.fullName}</h3>
                             <span
-                              className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                              className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${
                                 dr.accountStatus === 'APPROVED'
                                   ? 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1]'
                                   : dr.accountStatus === 'PENDING'
@@ -2156,7 +2167,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             </span>
 
                             <span
-                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
                                 dr.availability === 'ONLINE'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   : dr.availability === 'BUSY'
@@ -2168,12 +2179,12 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             </span>
 
                             {/* Zone Badge with Quick Assignment Selector */}
-                            <div className="flex items-center gap-1 bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg text-[10px]">
-                              <span className="font-bold text-[#0D47A1]">📍 Zone:</span>
+                            <div className="flex items-center gap-1 bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg text-[10px] max-w-full">
+                              <span className="font-bold text-[#0D47A1] shrink-0">📍 Zone:</span>
                               <select
                                 value={dr.zoneId || ''}
                                 onChange={(e) => handleUpdateDriverZone(dr.uid, e.target.value)}
-                                className="bg-transparent font-bold text-[#0D47A1] focus:outline-none cursor-pointer text-[10px]"
+                                className="bg-transparent font-bold text-[#0D47A1] focus:outline-none cursor-pointer text-[10px] truncate max-w-[140px]"
                               >
                                 <option value="">No Zone (All)</option>
                                 {zones.map((zone) => (
@@ -2185,12 +2196,12 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             </div>
 
                             {dr.rfidCardUid ? (
-                              <span className="font-mono text-[10px] font-black text-[#0D47A1] bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <span className="font-mono text-[10px] font-black text-[#0D47A1] bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0">
                                 <CreditCard className="w-3 h-3 text-[#0D47A1]" />
                                 <span>RFID: {dr.rfidCardUid}</span>
                               </span>
                             ) : (
-                              <span className="text-[10px] text-amber-700 italic font-bold">
+                              <span className="text-[10px] text-amber-700 italic font-bold shrink-0">
                                 * No RFID Linked
                               </span>
                             )}
@@ -2202,34 +2213,34 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                                   e.stopPropagation();
                                   setLicensePreviewUrl(dr.driverLicenseCardUrl || null);
                                 }}
-                                className="text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors"
+                                className="text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors shrink-0"
                                 title="Click to view Driver's License Card photo"
                               >
                                 <ImageIcon className="w-3 h-3 text-emerald-700" />
                                 <span>License Card Uploaded</span>
                               </button>
                             ) : (
-                              <span className="text-[10px] text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <span className="text-[10px] text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0">
                                 <AlertTriangle className="w-3 h-3 text-rose-600" />
                                 <span>No License Uploaded</span>
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 font-medium">
+                          <p className="text-xs text-slate-500 font-medium break-all sm:break-normal">
                             {dr.phone} • {dr.email}
                           </p>
-                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                          <p className="text-[10px] text-slate-500 font-medium">
                             Vehicle: {sanitizeVehicleInfo(dr.vehicleInfo)} • Rating: ⭐ {dr.rating || '5.0'}
                           </p>
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0 justify-start xl:justify-end pt-2.5 xl:pt-0 border-t xl:border-t-0 border-[#0D47A1]/15 w-full xl:w-auto">
                         <button
                           onClick={() => setDirectChatTarget({ id: dr.uid, name: dr.fullName, role: 'driver' })}
                           title="Open direct dispatch chat with driver"
-                          className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
+                          className="px-2.5 sm:px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>Chat</span>
@@ -2238,7 +2249,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                         <button
                           onClick={() => setSelectedDriverModal(dr)}
                           title="View driver profile and operational stats"
-                          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
+                          className="px-2.5 sm:px-3 py-1.5 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
                         >
                           <Eye className="w-3.5 h-3.5 text-[#0D47A1]" />
                           <span>Profile</span>
@@ -2248,7 +2259,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <button
                             onClick={() => handleApproveAndOpenRfidModal(dr)}
                             title="Approve driver application and assign RFID access card"
-                            className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black shadow-md uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform"
+                            className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black shadow-md uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
                             <CreditCard className="w-3.5 h-3.5 text-[#90CAF9]" />
@@ -2264,7 +2275,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                               setModalSuccessMsg('');
                             }}
                             title="Update RFID access card UID assigned to driver"
-                            className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                            className="px-2.5 sm:px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
                             <CreditCard className="w-3.5 h-3.5 text-[#90CAF9]" />
                             <span>{dr.rfidCardUid ? 'Change Card' : 'Link Card'}</span>
@@ -2275,7 +2286,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <button
                             onClick={() => handleUpdateDriverStatus(dr.uid, 'REJECTED')}
                             title="Decline driver registration request"
-                            className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                            className="px-2.5 sm:px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                           >
                             <XCircle className="w-3.5 h-3.5" />
                             <span>Reject</span>
@@ -2286,7 +2297,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <button
                             onClick={() => setSuspendModalData({ type: 'driver', id: dr.uid, name: dr.fullName })}
                             title="Suspend driver operating privileges"
-                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                            className="px-2.5 sm:px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                           >
                             <Ban className="w-3.5 h-3.5" />
                             <span>Suspend</span>
@@ -2297,7 +2308,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <button
                             onClick={() => handleUpdateDriverStatus(dr.uid, 'APPROVED')}
                             title="Reactivate driver account"
-                            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                            className="px-2.5 sm:px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
                             <span>Reactivate</span>
@@ -2328,7 +2339,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
 
             {/* Show Passengers if Role is ALL or CUSTOMERS */}
             {(userTabRole === 'ALL' || userTabRole === 'CUSTOMERS') && (
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-2 w-full min-w-0">
                 {userTabRole === 'ALL' && (
                   <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
                     <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
@@ -2350,20 +2361,20 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                     return (
                       <div
                         key={cust.uid}
-                        className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1]"
+                        className="bg-white border-2 border-[#0D47A1] rounded-2xl p-3.5 sm:p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 sm:gap-4 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1] w-full min-w-0"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm">
+                        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm mt-0.5 sm:mt-0">
                             {cust.fullName?.charAt(0) || 'U'}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1]">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] shrink-0">
                                 USER
                               </span>
-                              <h3 className="font-black text-sm text-[#0D47A1]">{cust.fullName}</h3>
+                              <h3 className="font-black text-sm text-[#0D47A1] break-words">{cust.fullName}</h3>
                               <span
-                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${
                                   cust.accountStatus === 'SUSPENDED'
                                     ? 'bg-rose-50 text-rose-600 border-rose-200'
                                     : 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1]'
@@ -2372,21 +2383,21 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                                 {cust.accountStatus || 'ACTIVE'}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 font-medium">
+                            <p className="text-xs text-slate-500 font-medium break-all sm:break-normal">
                               {cust.phone} • {cust.email}
                             </p>
-                            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            <div className="text-[10px] text-slate-500 font-medium">
                               Total Trips: <strong className="text-[#0D47A1]">{completedCount}</strong> • Joined: {formatDate(cust.createdAt)}
                             </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0 justify-start xl:justify-end pt-2.5 xl:pt-0 border-t xl:border-t-0 border-[#0D47A1]/15 w-full xl:w-auto">
                           <button
                             onClick={() => setDirectChatTarget({ id: cust.uid, name: cust.fullName, role: 'customer' })}
                             title="Open direct support chat with user"
-                            className="px-3.5 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             <span>Chat</span>
@@ -2395,7 +2406,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           <button
                             onClick={() => setSelectedCustomer(cust)}
                             title="View user profile and transit history"
-                            className="px-3.5 py-2 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
                             <Eye className="w-3.5 h-3.5 text-[#0D47A1]" />
                             <span>Profile</span>
@@ -2405,7 +2416,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             <button
                               onClick={() => handleUpdateCustomerStatus(cust.uid, 'APPROVED')}
                               title="Restore user account access"
-                              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                              className="px-2.5 sm:px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                               <span>Reactivate</span>
@@ -2414,7 +2425,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                             <button
                               onClick={() => setSuspendModalData({ type: 'customer', id: cust.uid, name: cust.fullName })}
                               title="Temporarily suspend user account"
-                              className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                              className="px-2.5 sm:px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                             >
                               <Ban className="w-3.5 h-3.5" />
                               <span>Suspend</span>
@@ -2446,7 +2457,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
 
             {/* Show Administrators if Role is ALL or ADMINS */}
             {(userTabRole === 'ALL' || userTabRole === 'ADMINS') && (
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-2 w-full min-w-0">
                 {userTabRole === 'ALL' && (
                   <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
                     <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
@@ -2469,46 +2480,46 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                     return (
                       <div
                         key={admin.uid}
-                        className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1]"
+                        className="bg-white border-2 border-[#0D47A1] rounded-2xl p-3.5 sm:p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 sm:gap-4 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1] w-full min-w-0"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm">
+                        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm mt-0.5 sm:mt-0">
                             <ShieldCheck className="w-5 h-5 text-amber-300" />
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D47A1] text-white shadow-sm">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D47A1] text-white shadow-sm shrink-0">
                                 ADMINISTRATOR
                               </span>
                               {isSelf && (
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 shrink-0">
                                   You (Active)
                                 </span>
                               )}
-                              <h3 className="font-black text-sm text-[#0D47A1]">{admin.fullName}</h3>
+                              <h3 className="font-black text-sm text-[#0D47A1] break-words">{admin.fullName}</h3>
                               {admin.username && (
-                                <span className="text-[10px] font-mono font-bold text-slate-500">
+                                <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0">
                                   @{admin.username}
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-500 font-medium">
+                            <p className="text-xs text-slate-500 font-medium break-all sm:break-normal">
                               {admin.phone || 'No direct phone'} • {admin.email}
                             </p>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
+                            <div className="text-[10px] text-slate-400">
                               Role: System Master Administrator • Created: {formatDate(admin.createdAt)}
                             </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0 justify-start xl:justify-end pt-2.5 xl:pt-0 border-t xl:border-t-0 border-[#0D47A1]/15 w-full xl:w-auto">
                           <button
                             onClick={() => {
                               setActiveTab('settings');
                             }}
                             title="Edit administrative credentials and system parameters"
-                            className="px-3.5 py-2 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
                             <UserCog className="w-3.5 h-3.5 text-[#0D47A1]" />
                             <span>Edit Admin</span>
@@ -2525,7 +2536,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                                 })
                               }
                               title="Permanently remove admin account from database"
-                              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>Delete</span>
@@ -2533,7 +2544,7 @@ const AdminDashboardContent: React.FC<AdminDashboardProps> = ({
                           ) : (
                             <span
                               title="Active admin account cannot be deleted while logged in"
-                              className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-xl border border-slate-200 select-none"
+                              className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-xl border border-slate-200 select-none shrink-0"
                             >
                               Active Session
                             </span>

@@ -100,6 +100,7 @@ export const HomeMapBooking: React.FC = () => {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [hasGpsAcquired, setHasGpsAcquired] = useState<boolean>(false);
+  const [userLiveCoords, setUserLiveCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const hasGpsAcquiredRef = React.useRef<boolean>(false);
 
   // Auto-detect operational zone strictly based on user's REAL GPS coordinates (when acquired)
@@ -146,6 +147,7 @@ export const HomeMapBooking: React.FC = () => {
       const { latitude, longitude } = position.coords;
       hasGpsAcquiredRef.current = true;
       setHasGpsAcquired(true);
+      setUserLiveCoords({ latitude, longitude });
       setIsLocatingGps(false);
 
       setPickup((prev) => {
@@ -173,6 +175,7 @@ export const HomeMapBooking: React.FC = () => {
       console.warn('Auto GPS location acquisition notice:', err.message);
       setIsLocatingGps(false);
       setHasGpsAcquired(false);
+      setUserLiveCoords(null);
       hasGpsAcquiredRef.current = false;
       setDetectedUserZone(null);
     };
@@ -290,15 +293,76 @@ export const HomeMapBooking: React.FC = () => {
     };
   }, []);
 
-  // 2. Real-time Service Zone Proximity Validation for Pickup & Destination
+  // Effective zone active for station filtering
+  const effectiveZoneId = useMemo(() => {
+    if (selectedZoneId && selectedZoneId !== 'all') {
+      return selectedZoneId;
+    }
+    return detectedUserZone?.id || undefined;
+  }, [selectedZoneId, detectedUserZone]);
+
+  const activeZoneObj = useMemo(() => {
+    if (effectiveZoneId) {
+      return zones.find((z) => z.id === effectiveZoneId) || detectedUserZone;
+    }
+    return detectedUserZone;
+  }, [effectiveZoneId, zones, detectedUserZone]);
+
+  // Active stations strictly belonging to the currently active/selected zone
+  const activeZoneStations = useMemo(() => {
+    if (activeZoneObj) {
+      return getStationsForZone(activeZoneObj, stations);
+    }
+    return stations.filter((s) => s.isActive !== false);
+  }, [activeZoneObj, stations]);
+
+  // 2. Real-time Service Zone Proximity Validation for Pickup & Destination (Strictly in active zone)
   const proximityCheck = useMemo(() => {
-    return checkLocationWithinStationArea(pickup.latitude, pickup.longitude, stations, 'pickup');
-  }, [pickup, stations]);
+    return checkLocationWithinStationArea(pickup.latitude, pickup.longitude, activeZoneStations, 'pickup');
+  }, [pickup, activeZoneStations]);
 
   const destinationProximityCheck = useMemo(() => {
     if (!destination) return null;
-    return checkLocationWithinStationArea(destination.latitude, destination.longitude, stations, 'dropoff');
-  }, [destination, stations]);
+    return checkLocationWithinStationArea(destination.latitude, destination.longitude, activeZoneStations, 'dropoff');
+  }, [destination, activeZoneStations]);
+
+  // Physical Location vs Selected Pickup Station Match Validation
+  const userLocationPickupMatch = useMemo(() => {
+    if (!userLiveCoords) {
+      return {
+        isVerified: false,
+        isMatch: false,
+        distanceMeters: 0,
+        stationName: proximityCheck.nearestStation?.name || pickup.address,
+        message: 'Phone GPS not acquired yet. Please enable location services.',
+      };
+    }
+
+    // Use designated station radius (minimum 100m catchment threshold to accommodate GPS drift)
+    const stationRadius = proximityCheck.nearestStation?.radiusMeters || 100;
+    const allowedRadius = Math.max(stationRadius, 100);
+
+    const distMeters = calculateDistanceMeters(
+      userLiveCoords.latitude,
+      userLiveCoords.longitude,
+      pickup.latitude,
+      pickup.longitude
+    );
+
+    const isMatch = distMeters <= allowedRadius;
+    const stationName = proximityCheck.nearestStation?.name || pickup.address;
+
+    return {
+      isVerified: true,
+      isMatch,
+      distanceMeters: Math.round(distMeters),
+      allowedRadius,
+      stationName,
+      message: isMatch
+        ? `Location Verified: You are at ${stationName} (${Math.round(distMeters)}m away)`
+        : `Location Mismatch: You are ${distMeters >= 1000 ? (distMeters / 1000).toFixed(1) + 'km' : Math.round(distMeters) + 'm'} away from "${stationName}". You must be at the station (within ${allowedRadius}m) to book.`,
+    };
+  }, [userLiveCoords, pickup, proximityCheck]);
 
   // Format distance cleanly
   const formattedDistanceToNearest = useMemo(() => {
@@ -330,6 +394,27 @@ export const HomeMapBooking: React.FC = () => {
     }
   };
 
+  // Snap Pickup to User's Physically Nearest Station
+  const handleSnapPickupToUserStation = () => {
+    if (!userLiveCoords) {
+      handleUseCurrentGpsLocation();
+      return;
+    }
+    const check = checkLocationWithinStationArea(userLiveCoords.latitude, userLiveCoords.longitude, activeZoneStations, 'pickup');
+    if (check.nearestStation) {
+      const st = check.nearestStation;
+      setPickup({
+        latitude: st.latitude,
+        longitude: st.longitude,
+        address: `${st.name} (${st.address})`,
+      });
+      setBookingError(null);
+      toast.success(`Pickup set to closest station: ${st.name}`);
+    } else {
+      toast.info('No operational shuttle stations found near your current location.');
+    }
+  };
+
   const handleSnapToNearestDestStation = () => {
     if (destinationProximityCheck?.nearestStation) {
       const st = destinationProximityCheck.nearestStation;
@@ -356,8 +441,9 @@ export const HomeMapBooking: React.FC = () => {
         const { latitude, longitude } = position.coords;
         hasGpsAcquiredRef.current = true;
         setHasGpsAcquired(true);
+        setUserLiveCoords({ latitude, longitude });
         // Verify proximity to nearest station
-        const check = checkLocationWithinStationArea(latitude, longitude, stations);
+        const check = checkLocationWithinStationArea(latitude, longitude, activeZoneStations, 'pickup');
 
         if (check.isWithinRadius && check.nearestStation) {
           setPickup({
@@ -540,7 +626,7 @@ export const HomeMapBooking: React.FC = () => {
   // Handle map tap selection
   const handleMapLocationSelect = (lat: number, lng: number) => {
     if (isSelectingOnMap === 'pickup') {
-      const check = checkLocationWithinStationArea(lat, lng, stations, 'pickup');
+      const check = checkLocationWithinStationArea(lat, lng, activeZoneStations, 'pickup');
       if (check.isWithinRadius && check.nearestStation) {
         setPickup({
           latitude: lat,
@@ -556,7 +642,7 @@ export const HomeMapBooking: React.FC = () => {
       }
       setBookingError(null);
     } else if (isSelectingOnMap === 'destination') {
-      const check = checkLocationWithinStationArea(lat, lng, stations, 'dropoff');
+      const check = checkLocationWithinStationArea(lat, lng, activeZoneStations, 'dropoff');
       if (check.isWithinRadius && check.nearestStation) {
         setDestination({
           latitude: check.nearestStation.latitude,
@@ -607,9 +693,63 @@ export const HomeMapBooking: React.FC = () => {
   const estMinutes = destination ? estimateDurationMinutes(distanceKm) : 0;
   const fareAmount = destination ? calculateFare(distanceKm) : 0;
 
-  // Handle Book Ride (Blocked if outside station service zone for pickup OR drop-off)
+  // Handle Book Ride (Blocked if outside station service zone, location mismatch, or outside drop-off)
   const handleConfirmBooking = async () => {
     if (!currentUser || !userProfile || !destination) return;
+
+    // 1. Physical Location vs Pick-up Station Verification
+    if (userLiveCoords) {
+      const allowedRadius = Math.max(proximityCheck.nearestStation?.radiusMeters || 100, 100);
+      const distMeters = calculateDistanceMeters(
+        userLiveCoords.latitude,
+        userLiveCoords.longitude,
+        pickup.latitude,
+        pickup.longitude
+      );
+
+      if (distMeters > allowedRadius) {
+        const distFormatted = distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${Math.round(distMeters)} meters`;
+        const err = `Pickup Location Mismatch: You are currently ${distFormatted} away from "${proximityCheck.nearestStation?.name || pickup.address}". You must be physically at or within ${allowedRadius}m of the designated pickup station before requesting a shuttle.`;
+        setBookingError(err);
+        toast.error(err);
+        return;
+      }
+    } else if (navigator.geolocation) {
+      // If live GPS hasn't been acquired yet, request it now to verify presence
+      setIsLocatingGps(true);
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 8000,
+            maximumAge: 0,
+          });
+        });
+        const { latitude, longitude } = pos.coords;
+        setUserLiveCoords({ latitude, longitude });
+        hasGpsAcquiredRef.current = true;
+        setHasGpsAcquired(true);
+
+        const allowedRadius = Math.max(proximityCheck.nearestStation?.radiusMeters || 100, 100);
+        const distMeters = calculateDistanceMeters(latitude, longitude, pickup.latitude, pickup.longitude);
+        if (distMeters > allowedRadius) {
+          const distFormatted = distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${Math.round(distMeters)} meters`;
+          const err = `Pickup Location Mismatch: Your current location is ${distFormatted} away from "${proximityCheck.nearestStation?.name || pickup.address}". You must be physically at or within ${allowedRadius}m of the pickup station to request a ride.`;
+          setBookingError(err);
+          toast.error(err);
+          setIsLocatingGps(false);
+          return;
+        }
+      } catch (locErr: any) {
+        setIsLocatingGps(false);
+        const err = 'Location verification required: Please enable device GPS permission so we can confirm you are physically at your selected pickup station.';
+        setBookingError(err);
+        toast.warning(err);
+        return;
+      } finally {
+        setIsLocatingGps(false);
+      }
+    }
 
     if (!proximityCheck.isWithinRadius) {
       const err = `Pickup point is outside the 100m pin geofence. Please select or walk within 100m of a designated station pin (${proximityCheck.nearestStation?.name || 'Nearest Station'}).`;
@@ -698,21 +838,6 @@ export const HomeMapBooking: React.FC = () => {
   // Zone derived from nearest station OR user's GPS detected zone
   const pickupStationZoneId = proximityCheck.nearestStation?.zoneId || detectedUserZone?.id;
 
-  // Effective zone active for station filtering
-  const effectiveZoneId = useMemo(() => {
-    if (selectedZoneId && selectedZoneId !== 'all') {
-      return selectedZoneId;
-    }
-    return detectedUserZone?.id || (zones.length > 0 ? zones[0].id : undefined);
-  }, [selectedZoneId, detectedUserZone, zones]);
-
-  const activeZoneObj = useMemo(() => {
-    if (effectiveZoneId) {
-      return zones.find((z) => z.id === effectiveZoneId) || detectedUserZone;
-    }
-    return detectedUserZone;
-  }, [effectiveZoneId, zones, detectedUserZone]);
-
   // Handle explicit zone switching by customer
   const handleSelectZone = (zoneId: string) => {
     setSelectedZoneId(zoneId);
@@ -721,13 +846,12 @@ export const HomeMapBooking: React.FC = () => {
 
     const targetZone = zones.find((z) => z.id === zoneId);
     const activeSts = stations.filter((s) => s.isActive !== false);
-    const zoneStations = targetZone ? getStationsForZone(targetZone, activeSts) : activeSts;
-    const fallbackStations = zoneStations.length > 0 ? zoneStations : activeSts;
+    const zoneStations = targetZone ? getStationsForZone(targetZone, activeSts) : [];
 
-    if (fallbackStations.length > 0) {
-      let nearest = fallbackStations[0];
+    if (zoneStations.length > 0) {
+      let nearest = zoneStations[0];
       let minDist = Infinity;
-      for (const st of fallbackStations) {
+      for (const st of zoneStations) {
         const dist = calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude);
         if (dist < minDist) {
           minDist = dist;
@@ -742,13 +866,16 @@ export const HomeMapBooking: React.FC = () => {
       });
 
       if (destination) {
-        const destInZone = fallbackStations.some(
+        const destInZone = zoneStations.some(
           (s) => calculateDistanceMeters(destination.latitude, destination.longitude, s.latitude, s.longitude) <= (s.radiusMeters || 100)
         );
         if (!destInZone) {
           setDestination(null);
         }
       }
+    } else {
+      // If the selected zone does not have stations yet, clear destination
+      setDestination(null);
     }
   };
 
@@ -759,15 +886,11 @@ export const HomeMapBooking: React.FC = () => {
 
     // Filter strictly by effective zone if selected or auto-detected
     if (activeZoneObj) {
-      const inZone = getStationsForZone(activeZoneObj, allowed);
-      if (inZone.length > 0) {
-        allowed = inZone;
-      }
-    } else if (effectiveZoneId) {
+      allowed = getStationsForZone(activeZoneObj, allowed);
+    } else if (effectiveZoneId && effectiveZoneId !== 'all') {
       const zoneMatch = zones.find((z) => z.id === effectiveZoneId);
       if (zoneMatch) {
-        const inZone = getStationsForZone(zoneMatch, allowed);
-        if (inZone.length > 0) allowed = inZone;
+        allowed = getStationsForZone(zoneMatch, allowed);
       }
     }
 
@@ -786,15 +909,11 @@ export const HomeMapBooking: React.FC = () => {
 
     // Filter strictly by effective zone if selected or auto-detected
     if (activeZoneObj) {
-      const inZone = getStationsForZone(activeZoneObj, allowed);
-      if (inZone.length > 0) {
-        allowed = inZone;
-      }
-    } else if (effectiveZoneId) {
+      allowed = getStationsForZone(activeZoneObj, allowed);
+    } else if (effectiveZoneId && effectiveZoneId !== 'all') {
       const zoneMatch = zones.find((z) => z.id === effectiveZoneId);
       if (zoneMatch) {
-        const inZone = getStationsForZone(zoneMatch, allowed);
-        if (inZone.length > 0) allowed = inZone;
+        allowed = getStationsForZone(zoneMatch, allowed);
       }
     }
 
@@ -818,11 +937,10 @@ export const HomeMapBooking: React.FC = () => {
     return allowed;
   }, [activeStations, pickupSearch, activeZoneObj, effectiveZoneId, zones, pickup]);
 
-  // Stations visible on map (filtered by pickup station zone if a station with a zone is selected)
+  // Stations visible on map (filtered strictly by active zone if one is selected)
   const displayStationsOnMap = useMemo(() => {
     if (activeZoneObj) {
-      const zoneSts = getStationsForZone(activeZoneObj, stations);
-      if (zoneSts.length > 0) return zoneSts;
+      return getStationsForZone(activeZoneObj, stations);
     }
     return stations;
   }, [stations, activeZoneObj]);
@@ -1174,6 +1292,40 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
+            {/* LIVE GPS VS PICKUP LOCATION MISMATCH WARNING */}
+            {userLiveCoords && !userLocationPickupMatch.isMatch && (
+              <div className="bg-rose-50 border-2 border-rose-400 p-3 rounded-2xl space-y-2 animate-in slide-in-from-bottom duration-200">
+                <div className="flex items-start gap-2 text-rose-900">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <span className="font-black block uppercase text-rose-800">Location Mismatch</span>
+                    <span className="font-medium text-rose-700">
+                      Your current phone GPS is <b>{userLocationPickupMatch.distanceMeters >= 1000 ? `${(userLocationPickupMatch.distanceMeters / 1000).toFixed(1)} km` : `${userLocationPickupMatch.distanceMeters}m`}</b> away from <b>{userLocationPickupMatch.stationName}</b>. You must be physically at this pickup station to request a ride.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSnapPickupToUserStation}
+                    className="flex-1 py-1.5 px-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>Switch to Nearest Stop</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentGpsLocation}
+                    className="py-1.5 px-2.5 bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-transform"
+                  >
+                    <Crosshair className="w-3.5 h-3.5" />
+                    <span>Refresh GPS</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* PICKUP GEOFENCE PROXIMITY WARNING IF FAR FROM PINNED STATIONS */}
             {!proximityCheck.isWithinRadius && (
               <div className="bg-amber-50 border-2 border-amber-400 p-3 rounded-2xl space-y-2 animate-in slide-in-from-bottom duration-200">
@@ -1226,15 +1378,15 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
-            {/* IN-ZONE SUCCESS BADGE */}
-            {hasGpsAcquired && proximityCheck.isWithinRadius && proximityCheck.nearestStation && (!destination || destinationProximityCheck?.isWithinRadius) && (
+            {/* IN-ZONE & GPS VERIFIED SUCCESS BADGE */}
+            {hasGpsAcquired && userLiveCoords && userLocationPickupMatch.isMatch && proximityCheck.isWithinRadius && proximityCheck.nearestStation && (!destination || destinationProximityCheck?.isWithinRadius) && (
               <div className="bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-xl flex items-center justify-between text-[10px] text-emerald-800 font-bold">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Station In Range</span>
+                  <span>GPS Matched with Pickup Station</span>
                 </div>
                 <span className="text-[9px] bg-emerald-200/80 px-2 py-0.5 rounded-md font-mono">
-                  {proximityCheck.distanceMeters}m away
+                  {userLocationPickupMatch.distanceMeters}m from stop
                 </span>
               </div>
             )}
@@ -1328,17 +1480,20 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
-            {/* Confirm Book Ride Button (Disabled if outside proximity radius for pickup or drop-off, or no destination) */}
+            {/* Confirm Book Ride Button (Disabled if outside proximity radius, location mismatch, or outside drop-off) */}
             <button
               onClick={handleConfirmBooking}
               disabled={
                 !destination ||
                 isBookingLoading ||
                 !proximityCheck.isWithinRadius ||
+                (userLiveCoords !== null && !userLocationPickupMatch.isMatch) ||
                 (destinationProximityCheck !== null && !destinationProximityCheck.isWithinRadius)
               }
               title={
-                !proximityCheck.isWithinRadius
+                userLiveCoords !== null && !userLocationPickupMatch.isMatch
+                  ? `Booking disabled: Your current location does not match "${userLocationPickupMatch.stationName}"`
+                  : !proximityCheck.isWithinRadius
                   ? 'Booking disabled: Pick-up must be within a designated shuttle station area'
                   : destinationProximityCheck && !destinationProximityCheck.isWithinRadius
                   ? 'Booking disabled: Drop-off must be within a designated shuttle station area'
@@ -1350,6 +1505,7 @@ export const HomeMapBooking: React.FC = () => {
                 destination &&
                 !isBookingLoading &&
                 proximityCheck.isWithinRadius &&
+                (userLiveCoords === null || userLocationPickupMatch.isMatch) &&
                 (!destinationProximityCheck || destinationProximityCheck.isWithinRadius)
                   ? 'bg-[#0D47A1] hover:bg-[#1565C0] text-white shadow-blue-900/30 border border-[#0D47A1]'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
@@ -1358,6 +1514,8 @@ export const HomeMapBooking: React.FC = () => {
               <Send className="w-4 h-4" />
               {isBookingLoading ? (
                 <span>Requesting Shuttle...</span>
+              ) : userLiveCoords !== null && !userLocationPickupMatch.isMatch ? (
+                <span>Location Mismatch: Move to Station</span>
               ) : !proximityCheck.isWithinRadius ? (
                 <span>Outside Service Zone</span>
               ) : destination && destinationProximityCheck && !destinationProximityCheck.isWithinRadius ? (
@@ -1420,8 +1578,15 @@ export const HomeMapBooking: React.FC = () => {
                 </div>
               ) : (
                 filteredPickupStations.map((st) => {
-                  const distMeters = pickup.latitude && pickup.longitude ? calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude) : null;
-                  const formattedDist = distMeters !== null ? (distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${distMeters}m away`) : null;
+                  const distFromUser = userLiveCoords
+                    ? calculateDistanceMeters(userLiveCoords.latitude, userLiveCoords.longitude, st.latitude, st.longitude)
+                    : null;
+                  const isUserAtStation = distFromUser !== null && distFromUser <= (st.radiusMeters || 100);
+                  const formattedDist = distFromUser !== null
+                    ? distFromUser >= 1000
+                      ? `${(distFromUser / 1000).toFixed(1)} km from you`
+                      : `${Math.round(distFromUser)}m from you`
+                    : null;
 
                   return (
                     <button
@@ -1435,20 +1600,32 @@ export const HomeMapBooking: React.FC = () => {
                         setBookingError(null);
                         setShowPickupModal(false);
                       }}
-                      className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
+                      className={`w-full text-left p-3 rounded-2xl border transition-colors group flex items-start gap-3 ${
+                        isUserAtStation
+                          ? 'bg-emerald-50/60 border-emerald-400 hover:bg-emerald-100/70'
+                          : 'bg-[#F8FAFC] hover:bg-[#E3F2FD] border-[#0D47A1]/30 hover:border-[#0D47A1]'
+                      }`}
                     >
-                      <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
+                      <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                        isUserAtStation
+                          ? 'bg-emerald-600 border-emerald-700 text-white'
+                          : 'bg-[#E3F2FD] border-[#0D47A1] text-[#0D47A1] group-hover:bg-[#0D47A1] group-hover:text-white'
+                      }`}>
                         <MapPin className="w-4 h-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
                           <div className="flex items-center gap-1 shrink-0">
-                            {formattedDist && (
-                              <span className="text-[9px] font-mono font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
+                            {isUserAtStation ? (
+                              <span className="text-[9px] font-mono font-black text-emerald-900 bg-emerald-200 border border-emerald-400 px-1.5 py-0.5 rounded animate-pulse">
+                                ✓ You are here
+                              </span>
+                            ) : formattedDist ? (
+                              <span className="text-[9px] font-mono font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded">
                                 {formattedDist}
                               </span>
-                            )}
+                            ) : null}
                             <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
                               {st.category || 'Stop'}
                             </span>
