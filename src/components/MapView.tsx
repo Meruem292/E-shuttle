@@ -474,7 +474,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Interactive Selection Banner Overlay */}
       {isSelectingLocation && (
-        <div className="absolute top-4 left-4 right-4 z-10 bg-white/95 backdrop-blur border-2 border-[#0D47A1] text-[#0D47A1] px-4 py-2.5 rounded-2xl shadow-xl flex items-center justify-between text-xs animate-pulse">
+        <div className="absolute top-16 left-3 right-3 z-10 bg-white/95 backdrop-blur border-2 border-[#0D47A1] text-[#0D47A1] px-4 py-2.5 rounded-2xl shadow-xl flex items-center justify-between text-xs animate-pulse">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 bg-[#0D47A1] rounded-full animate-ping"></span>
             <span className="font-bold">Tap anywhere on map to select <b>{isSelectingLocation}</b></span>
@@ -484,7 +484,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* NAVIGATION BANNER */}
       {showNavigationBanner && activeRouteInfo && (
-        <div className="absolute top-3 left-3 right-3 z-10 max-w-md mx-auto animate-in slide-in-from-top duration-300">
+        <div className="absolute top-16 left-3 right-3 z-10 max-w-md mx-auto animate-in slide-in-from-top duration-300">
           <div className="bg-white/95 backdrop-blur-xl border-2 border-[#0D47A1] text-[#0D47A1] rounded-2xl p-3.5 shadow-xl flex items-center justify-between gap-3">
             <div className="w-11 h-11 bg-[#0D47A1] rounded-xl flex items-center justify-center shrink-0 shadow-md">
               {renderTurnIcon(currentStep)}

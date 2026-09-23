@@ -420,13 +420,13 @@ export const DriverHome: React.FC = () => {
       />
 
       {/* Top Driver Header Bar */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
-        <div className="flex items-center justify-between gap-2 pointer-events-auto max-w-md mx-auto w-full">
+      <div className="absolute top-0 left-0 right-0 z-20 p-2 sm:p-3 pointer-events-none">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 pointer-events-auto max-w-md mx-auto w-full">
           {/* Driver Profile & Status Pill (Click/Tap for Full Details Tooltip) */}
           <div
             onClick={() => setShowInfoTooltip((prev) => !prev)}
             title="Tap to view vehicle, zone & RFID details"
-            className="flex items-center gap-2 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg min-w-0 flex-1 cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.98]"
+            className="flex items-center gap-1.5 sm:gap-2 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-2.5 sm:px-3 py-1.5 rounded-full shadow-lg min-w-0 flex-1 cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.98] overflow-hidden"
           >
             <img
               src={appLogo}
@@ -435,17 +435,17 @@ export const DriverHome: React.FC = () => {
                 (e.target as HTMLImageElement).src = officialLogoFallback;
               }}
               alt="E-Shuttle Official Logo"
-              className="w-7 h-7 rounded-full object-cover border border-[#0D47A1] shrink-0"
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover border border-[#0D47A1] shrink-0"
             />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <h1 className="text-xs font-black text-[#0D47A1] leading-none truncate">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex items-center gap-1 min-w-0">
+                <h1 className="text-[11px] sm:text-xs font-black text-[#0D47A1] leading-none truncate">
                   {driverProfile?.fullName || 'Driver'}
                 </h1>
                 <Info className="w-3 h-3 text-[#0D47A1]/70 shrink-0" />
               </div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <p className="text-[10px] text-[#0D47A1] font-bold truncate">
+              <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                <p className="text-[9px] sm:text-[10px] text-[#0D47A1] font-bold truncate flex-1 min-w-0">
                   {driverProfile?.zoneName
                     ? `📍 ${driverProfile.zoneName}`
                     : sanitizeVehicleInfo(driverProfile?.vehicleInfo)}
@@ -473,7 +473,7 @@ export const DriverHome: React.FC = () => {
           <button
             onClick={handleToggleOnline}
             disabled={availability === 'BUSY'}
-            className={`shrink-0 px-3.5 py-1.5 rounded-full font-black text-xs shadow-lg backdrop-blur transition-transform active:scale-95 uppercase flex items-center gap-1.5 border-2 ${
+            className={`shrink-0 px-2.5 sm:px-3.5 py-1.5 rounded-full font-black text-[10px] sm:text-xs shadow-lg backdrop-blur transition-transform active:scale-95 uppercase flex items-center gap-1 sm:gap-1.5 border-2 ${
               availability === 'ONLINE'
                 ? 'bg-emerald-600 text-white border-emerald-700'
                 : availability === 'BUSY'

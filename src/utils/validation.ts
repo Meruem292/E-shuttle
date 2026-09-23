@@ -331,30 +331,35 @@ export function formatFullName(input: string): string {
 
 /**
  * Validates RFID Card UID.
- * Must be 8 to 14 hexadecimal characters (0-9, A-F).
+ * Standard RFID UIDs are 6 to 16 hexadecimal digits (3 to 8 bytes, e.g. D9-C0-52-12 or 47-10-CC-14).
+ * Hyphens (-), colons (:), and spaces are permitted formatting separators.
  */
-export const RFID_UID_REGEX = /^[0-9A-F]{8,14}$/;
+export const RFID_UID_REGEX = /^[0-9A-F\-:\s]{6,24}$/;
 
 export function isValidRfidUid(uid: string): boolean {
   if (!uid || typeof uid !== 'string') return false;
   const trimmed = uid.trim().toUpperCase();
-  return RFID_UID_REGEX.test(trimmed);
+  if (/[^0-9A-F\-:\s]/.test(trimmed)) return false;
+  const hexOnly = trimmed.replace(/[^0-9A-F]/g, '');
+  return hexOnly.length >= 6 && hexOnly.length <= 16;
 }
 
 export function getRfidUidValidationError(uid: string): string | null {
   const trimmed = uid.trim().toUpperCase();
   if (!trimmed) return null; // Optional
 
-  if (/[^0-9A-F]/.test(trimmed)) {
-    return 'RFID UID must contain only hexadecimal characters (0-9, A-F).';
+  if (/[^0-9A-F\-:\s]/.test(trimmed)) {
+    return 'RFID UID must contain only hexadecimal characters (0-9, A-F), hyphens, colons, or spaces.';
   }
 
-  if (trimmed.length < 8) {
-    return `RFID UID is too short (${trimmed.length}/8 min hex chars).`;
+  const hexOnly = trimmed.replace(/[^0-9A-F]/g, '');
+
+  if (hexOnly.length < 6) {
+    return `RFID UID is too short (${hexOnly.length}/6 min hex chars). e.g., D9-C0-52-12`;
   }
 
-  if (trimmed.length > 14) {
-    return 'RFID UID cannot exceed 14 hex characters.';
+  if (hexOnly.length > 16) {
+    return 'RFID UID cannot exceed 16 hex characters.';
   }
 
   return null;
@@ -364,7 +369,7 @@ export const getRfidValidationError = getRfidUidValidationError;
 
 export function formatRfidUid(input: string): string {
   if (!input) return '';
-  return input.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 14);
+  return input.toUpperCase().replace(/[^0-9A-F\-:\s]/g, '').slice(0, 24);
 }
 
 /**
